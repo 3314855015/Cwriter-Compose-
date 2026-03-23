@@ -60,6 +60,7 @@ private val Scrim           = Color(0x80000000)
 fun CatalogPanel(
     isVisible: Boolean,
     isDark: Boolean = false,
+    workTitle: String = "",
     onDismiss: () -> Unit,
     onOpenChapter: (Chapter) -> Unit,
     viewModel: VolumedWorkViewModel
@@ -178,6 +179,29 @@ fun CatalogPanel(
                             .background(bgIndex),
                         contentPadding = PaddingValues(vertical = 6.dp)
                     ) {
+                        // 书名（不可点击，固定顶部）
+                        if (workTitle.isNotEmpty()) {
+                            item(key = "book_title") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(if (isDark) Color(0xFF1A1A1A) else Color(0xFFF0F0F0))
+                                        .padding(horizontal = 12.dp, vertical = 14.dp)
+                                ) {
+                                    Text(
+                                        text = workTitle,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = textMain,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                                HorizontalDivider(color = divider, thickness = 0.5.dp)
+                            }
+                        }
+
                         itemsIndexed(volumes) { _, volume ->
                             val isActive = volume.id == activeVolumeId
                             Box(

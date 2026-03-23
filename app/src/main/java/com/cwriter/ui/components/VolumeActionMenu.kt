@@ -1,151 +1,141 @@
 package com.cwriter.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cwriter.ui.theme.LocalIsDark
+
+private val Red = Color(0xFFFF4444)
 
 /**
- * 卷操作菜单（底部弹窗）
- * 包含：重命名、删除
+ * 卷操作菜单 — 直接作为 overlay 渲染在父 Box 里，不用 Dialog
+ * 避免 Dialog Window 层级带来的手势竞争问题
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VolumeActionMenu(
     onDismiss: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface
+    val isDark   = LocalIsDark.current
+    val bgMenu   = if (isDark) Color(0xFF2A2A2A) else Color(0xFFFFFFFF)
+    val textMain = if (isDark) Color(0xFFFFFFFF) else Color(0xFF333333)
+    val textSub  = if (isDark) Color(0xFFB3B3B3) else Color(0xFF666666)
+    val divider  = if (isDark) Color(0xFF404040) else Color(0xFFEEEEEE)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x80000000))
+            .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
+        contentAlignment = Alignment.BottomCenter
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(bgMenu)
+                .navigationBarsPadding()
+                .pointerInput(Unit) { detectTapGestures { } } // 拦截，防止点穿到遮罩
         ) {
-            Text(
-                text = "卷操作",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            
-            Divider(modifier = Modifier.padding(bottom = 8.dp))
-            
-            // 重命名
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        onDismiss()
-                        onRename()
-                    }
-                    .padding(vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .clickable { onDismiss(); onRename() }
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.Edit,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = "修改卷名",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Text("修改卷名", fontSize = 16.sp, color = textMain)
             }
-            
-            // 删除
-            Row(
+
+            HorizontalDivider(color = divider, thickness = 0.5.dp)
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        onDismiss()
-                        onDelete()
-                    }
-                    .padding(vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .clickable { onDismiss(); onDelete() }
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.Delete,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.error
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = "删除卷",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Text("删除卷", fontSize = 16.sp, color = Red, fontWeight = FontWeight.Medium)
+            }
+
+            HorizontalDivider(color = divider, thickness = 4.dp)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("取消", fontSize = 16.sp, color = textSub)
             }
         }
     }
 }
 
 /**
- * 章节操作菜单（底部弹窗）
- * 包含：删除
+ * 章节操作菜单 — 同上，overlay 方式
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChapterActionMenu(
     onDismiss: () -> Unit,
     onDelete: () -> Unit
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface
+    val isDark  = LocalIsDark.current
+    val bgMenu  = if (isDark) Color(0xFF2A2A2A) else Color(0xFFFFFFFF)
+    val textSub = if (isDark) Color(0xFFB3B3B3) else Color(0xFF666666)
+    val divider = if (isDark) Color(0xFF404040) else Color(0xFFEEEEEE)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x80000000))
+            .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
+        contentAlignment = Alignment.BottomCenter
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(bgMenu)
+                .navigationBarsPadding()
+                .pointerInput(Unit) { detectTapGestures { } }
         ) {
-            Text(
-                text = "章节操作",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            
-            Divider(modifier = Modifier.padding(bottom = 8.dp))
-            
-            // 删除章节
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        onDismiss()
-                        onDelete()
-                    }
-                    .padding(vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .clickable { onDismiss(); onDelete() }
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.Delete,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.error
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = "删除章节",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Text("删除章节", fontSize = 16.sp, color = Red, fontWeight = FontWeight.Medium)
+            }
+
+            HorizontalDivider(color = divider, thickness = 4.dp)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("取消", fontSize = 16.sp, color = textSub)
             }
         }
     }
