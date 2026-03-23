@@ -90,3 +90,7 @@ lint-results.xml
 # 测试覆盖率报告
 coverage/
 *.ec
+
+#说明文档
+说明文档/
+VOLUMED_WORK_TRANSPLANT.md
