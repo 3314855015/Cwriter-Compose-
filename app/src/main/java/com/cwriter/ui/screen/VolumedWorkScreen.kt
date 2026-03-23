@@ -8,7 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -28,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cwriter.data.model.Chapter
 import com.cwriter.data.model.Volume
 import com.cwriter.ui.components.CatalogPanel
+import com.cwriter.ui.components.ChapterActionMenu
 import com.cwriter.ui.components.CreateChapterDialog
 import com.cwriter.ui.components.CreateVolumeDialog
 import com.cwriter.ui.components.RenameVolumeDialog
@@ -57,6 +58,13 @@ private val DividerLight      = Color(0xFFF0F0F0)
 private val DividerDark       = Color(0xFF333333)
 private val Orange            = Color(0xFFFF6B35)
 
+/** 数字转中文序数 */
+private fun toChineseOrdinal(n: Int): String {
+    val map = listOf("零","一","二","三","四","五","六","七","八","九","十",
+        "十一","十二","十三","十四","十五","十六","十七","十八","十九","二十")
+    return if (n in 1..20) map[n] else n.toString()
+}
+
 @Composable
 fun VolumedWorkScreen(
     userId: String,
@@ -85,12 +93,16 @@ fun VolumedWorkScreen(
     val sortOrder       by viewModel.sortOrder.collectAsState()
     val expandedVolumeId by viewModel.expandedVolumeId.collectAsState()
 
-    var showCatalog             by remember { mutableStateOf(false) }
-    var showCreateChapterModal  by remember { mutableStateOf(false) }
-    var showCreateVolumeModal   by remember { mutableStateOf(false) }
-    var showRenameVolumeModal   by remember { mutableStateOf(false) }
-    var showVolumeMenu          by remember { mutableStateOf(false) }
-    var currentEditingVolume    by remember { mutableStateOf<Volume?>(null) }
+    var showCatalog               by remember { mutableStateOf(false) }
+    var showCreateChapterModal   by remember { mutableStateOf(false) }
+    var showCreateVolumeModal    by remember { mutableStateOf(false) }
+    var showRenameVolumeModal    by remember { mutableStateOf(false) }
+    var showVolumeMenu           by remember { mutableStateOf(false) }
+    var showChapterMenu          by remember { mutableStateOf(false) }
+    var showDeleteChapterConfirm by remember { mutableStateOf(false) }
+    var showDeleteVolumeConfirm  by remember { mutableStateOf(false) }
+    var currentEditingVolume     by remember { mutableStateOf<Volume?>(null) }
+    var currentEditingChapter    by remember { mutableStateOf<Chapter?>(null) }
 
     LaunchedEffect(userId, workId) {
         viewModel.init(context, userId, workId)
@@ -163,9 +175,12 @@ fun VolumedWorkScreen(
                         }
                     } else {
                         // 用 displayVolumes（已按正/倒序排列），卷名和卷数据完全对应
-                        items(displayVolumes, key = { it.id }) { volume ->
+                        itemsIndexed(displayVolumes, key = { _, v -> v.id }) { displayIdx, volume ->
+                            // 正序时 volumeIndex = displayIdx，倒序时还原真实序号
+                            val volumeIndex = if (sortOrder == "desc") volumes.size - 1 - displayIdx else displayIdx
                             VolumeCard(
                                 volume       = volume,
+                                volumeIndex  = volumeIndex,
                                 chapters     = chaptersByVolume[volume.id] ?: emptyList(),
                                 isExpanded   = expandedVolumeId == volume.id,
                                 isLoaded     = viewModel.isVolumeLoaded(volume.id),
@@ -181,7 +196,15 @@ fun VolumedWorkScreen(
                                 formatTime   = { ts -> viewModel.formatTime(ts) },
                                 onToggleExpand = { viewModel.toggleVolumeExpand(volume.id) },
                                 onLongPress  = { currentEditingVolume = volume; showVolumeMenu = true },
-                                onChapterClick = { chapter -> viewModel.openChapter(chapter) }
+                                onChapterClick = { chapter -> viewModel.openChapter(chapter) },
+                                onChapterLongPress = { chapter ->
+                                    currentEditingChapter = chapter
+                                    // 记录所属卷，作为 volumeId 兜底
+                                    if (currentEditingVolume?.id != volume.id) {
+                                        currentEditingVolume = volume
+                                    }
+                                    showChapterMenu = true
+                                }
                             )
                         }
                     }
@@ -213,6 +236,7 @@ fun VolumedWorkScreen(
             CatalogPanel(
                 isVisible    = true,
                 isDark       = isDark,
+                workTitle    = workInfo.title,
                 onDismiss    = { showCatalog = false },
                 onOpenChapter = { chapter -> viewModel.openChapter(chapter) },
                 viewModel    = viewModel
@@ -223,7 +247,70 @@ fun VolumedWorkScreen(
             VolumeActionMenu(
                 onDismiss = { showVolumeMenu = false },
                 onRename  = { showVolumeMenu = false; showRenameVolumeModal = true },
-                onDelete  = { showVolumeMenu = false; viewModel.confirmDeleteVolume(currentEditingVolume!!) }
+                onDelete  = { showVolumeMenu = false; showDeleteVolumeConfirm = true }
+            )
+        }
+
+        if (showChapterMenu && currentEditingChapter != null) {
+            ChapterActionMenu(
+                onDismiss = { showChapterMenu = false },
+                onDelete  = { showChapterMenu = false; showDeleteChapterConfirm = true }
+            )
+        }
+
+        // 菜单关闭且没有进入删除流程时，清空编辑状态
+        LaunchedEffect(showChapterMenu, showDeleteChapterConfirm) {
+            if (!showChapterMenu && !showDeleteChapterConfirm) {
+                currentEditingChapter = null
+            }
+        }
+
+        // 删除章节确认
+        if (showDeleteChapterConfirm && currentEditingChapter != null) {
+            AlertDialog(
+                onDismissRequest = { showDeleteChapterConfirm = false; currentEditingChapter = null },
+                text = { Text("真的要删除此章节吗？") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDeleteChapterConfirm = false
+                        currentEditingChapter?.let { ch ->
+                            // volumeId 优先从 chapter 取，若为空则从 currentEditingVolume 取
+                            val vid = ch.volumeId?.takeIf { it.isNotEmpty() }
+                                ?: currentEditingVolume?.id ?: ""
+                            viewModel.deleteChapter(vid, ch.id)
+                        }
+                        currentEditingChapter = null
+                    }) {
+                        Text("删除", color = Color(0xFFFF4444))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteChapterConfirm = false; currentEditingChapter = null }) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
+
+        // 删除卷确认
+        if (showDeleteVolumeConfirm && currentEditingVolume != null) {
+            AlertDialog(
+                onDismissRequest = { showDeleteVolumeConfirm = false; currentEditingVolume = null },
+                text = { Text("此操作会删除当前卷下所有子章节，确定删除吗？") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDeleteVolumeConfirm = false
+                        currentEditingVolume?.let { viewModel.confirmDeleteVolume(it) }
+                        currentEditingVolume = null
+                    }) {
+                        Text("删除", color = Color(0xFFFF4444))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteVolumeConfirm = false; currentEditingVolume = null }) {
+                        Text("取消")
+                    }
+                }
             )
         }
 
@@ -392,6 +479,7 @@ private fun AddVolumeCell(onClick: () -> Unit) {
 @Composable
 private fun VolumeCard(
     volume: Volume,
+    volumeIndex: Int,
     chapters: List<Chapter>,
     isExpanded: Boolean,
     isLoaded: Boolean,
@@ -407,7 +495,8 @@ private fun VolumeCard(
     formatTime: (String) -> String,
     onToggleExpand: () -> Unit,
     onLongPress: () -> Unit,
-    onChapterClick: (Chapter) -> Unit
+    onChapterClick: (Chapter) -> Unit,
+    onChapterLongPress: (Chapter) -> Unit
 ) {
     val arrowRotation by animateFloatAsState(
         targetValue = if (isExpanded) 90f else 0f,
@@ -442,7 +531,7 @@ private fun VolumeCard(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = volume.name.ifEmpty { volume.title.ifEmpty { "未命名卷" } },
+                    text = "第${toChineseOrdinal(volumeIndex + 1)}卷 ${volume.name.ifEmpty { volume.title.ifEmpty { "未命名卷" } }}",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = textMain,
@@ -489,7 +578,8 @@ private fun VolumeCard(
                                 isWriting     = isLastGlobally(chapter.id),
                                 textMain      = textMain,
                                 textHint      = textHint,
-                                onClick       = { onChapterClick(chapter) }
+                                onClick       = { onChapterClick(chapter) },
+                                onLongPress   = { onChapterLongPress(chapter) }
                             )
                         }
                     }
@@ -509,13 +599,19 @@ private fun ChapterRow(
     isWriting: Boolean,       // true = 全局最后一章（写作中），false = 已完成
     textMain: Color,
     textHint: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongPress() }
+                )
+            }
             .padding(horizontal = 8.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

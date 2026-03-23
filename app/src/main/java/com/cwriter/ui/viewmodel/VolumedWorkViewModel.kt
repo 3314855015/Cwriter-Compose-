@@ -85,8 +85,10 @@ class VolumedWorkViewModel : ViewModel() {
                     // 分卷作品 - 加载卷和章节
                     loadVolumesAndChapters()
                 } else {
-                    // 不分卷作品 - 自动创建默认卷
-                    convertToVolumeStructure()
+                    // 不分卷作品 - 显示提示（不再自动迁移）
+                    _events.emit(Event.ShowToast("该作品不是分卷结构", false))
+                    _isLoading.value = false
+                    return@launch
                 }
                 
                 _isLoading.value = false
@@ -120,9 +122,12 @@ class VolumedWorkViewModel : ViewModel() {
     }
     
     /**
-     * 转换为卷结构（兼容旧数据）
+     * 转换为卷结构（兼容旧数据）- 已取消
      * 对应 Vue 代码中的 convertToVolumeStructure 方法
+     * 
+     * 注意：此功能已禁用，不再自动将非分卷作品转换为分卷结构
      */
+    /*
     private suspend fun convertToVolumeStructure() {
         try {
             // 读取旧的章节数据
@@ -141,9 +146,11 @@ class VolumedWorkViewModel : ViewModel() {
                 }
                 
                 // 更新作品配置为分卷结构
-                repository?.updateWork(userId, workId, workInfo.value.copy(
-                    structureType = Work.StructureType.VOLUMED
-                ))
+                val work = repository?.getWork(userId, workId)
+                if (work != null) {
+                    work.structureType = Work.StructureType.VOLUMED
+                    repository?.updateWork(userId, work)
+                }
                 
                 // 重新加载
                 loadVolumesAndChapters()
@@ -152,6 +159,7 @@ class VolumedWorkViewModel : ViewModel() {
             _events.emit(Event.ShowToast("转换卷结构失败: ${e.message}", true))
         }
     }
+    */
     
     /**
      * 切换排序顺序
@@ -214,18 +222,157 @@ class VolumedWorkViewModel : ViewModel() {
     }
     
     /**
-     * 确认删除卷
-     * 对应 Vue 代码中的 confirmDeleteVolume 方法
+     * 创建卷
+     * 对应 Vue 代码中的 createVolume 方法
      */
-    fun confirmDeleteVolume(volume: Volume) {
+    fun createVolume(name: String, description: String) {
         viewModelScope.launch {
-            val chapterCount = chaptersByVolume.value[volume.id]?.size ?: 0
-            val volumeName = volume.name ?: "未命名卷"
-            
-            _events.emit(Event.ShowToast("删除卷功能待实现", false))
+            try {
+                val volume = Volume(
+                    name = name,
+                    title = name,
+                    description = description
+                )
+                val newVolume = repository?.createVolume(userId, workId, volume)
+
+                if (newVolume != null) {
+                    // 重新加载卷列表
+                    val updatedVolumes = repository?.getVolumes(userId, workId) ?: emptyList()
+                    _volumes.value = updatedVolumes
+
+                    // 新卷标记为已加载（空章节），避免展开时出现 loading
+                    val currentMap = _chaptersByVolume.value.toMutableMap()
+                    currentMap[newVolume.id] = emptyList()
+                    _chaptersByVolume.value = currentMap
+                    loadedVolumeIds.add(newVolume.id)
+
+                    // 自动展开新创建的卷
+                    _expandedVolumeId.value = newVolume.id
+
+                    _events.emit(Event.ShowToast("卷创建成功", false))
+                }
+            } catch (e: Exception) {
+                _events.emit(Event.ShowToast("创建卷失败: ${e.message}", true))
+            }
         }
     }
     
+    /**
+     * 创建章节
+     * 对应 Vue 代码中的 createChapter 方法
+     */
+    fun createChapter(title: String, content: String, volumeId: String) {
+        viewModelScope.launch {
+            try {
+                val chapter = Chapter(
+                    title = title,
+                    content = content,
+                    volumeId = volumeId
+                )
+                chapter.updateWordCount()
+                
+                val newChapter = repository?.createChapter(userId, workId, volumeId, chapter)
+                
+                if (newChapter != null) {
+                    // 重新加载该卷的章节
+                    loadVolumeChapters(volumeId)
+                    
+                    _events.emit(Event.ShowToast("章节创建成功", false))
+                }
+            } catch (e: Exception) {
+                _events.emit(Event.ShowToast("创建章节失败: ${e.message}", true))
+            }
+        }
+    }
+    
+    /**
+     * 重命名卷
+     * 对应 Vue 代码中的 renameVolume 方法
+     */
+    fun renameVolume(volumeId: String, newName: String) {
+        viewModelScope.launch {
+            try {
+                val updates = mapOf(
+                    "name" to newName,
+                    "title" to newName
+                )
+                
+                repository?.updateVolume(userId, workId, volumeId, updates)
+                
+                // 重新加载卷列表
+                val updatedVolumes = repository?.getVolumes(userId, workId) ?: emptyList()
+                _volumes.value = updatedVolumes
+                
+                _events.emit(Event.ShowToast("卷名修改成功", false))
+            } catch (e: Exception) {
+                _events.emit(Event.ShowToast("修改卷名失败: ${e.message}", true))
+            }
+        }
+    }
+    
+    /**
+     * 确认删除卷
+     * 对应 Vue 代码中的 confirmDeleteVolume 方法
+     * 用户确认后，删除卷内所有章节，然后删除卷
+     */
+    fun confirmDeleteVolume(volume: Volume) {
+        viewModelScope.launch {
+            try {
+                val chapters = chaptersByVolume.value[volume.id] ?: emptyList()
+                
+                // 如果卷内有章节，先删除所有章节
+                if (chapters.isNotEmpty()) {
+                    for (chapter in chapters) {
+                        repository?.deleteVolumeChapter(userId, workId, volume.id, chapter.id)
+                    }
+                    
+                    // 从缓存中移除这些章节
+                    val currentMap = _chaptersByVolume.value.toMutableMap()
+                    currentMap[volume.id] = emptyList()
+                    _chaptersByVolume.value = currentMap
+                    
+                    _events.emit(Event.ShowToast("已删除卷内 ${chapters.size} 个章节", false))
+                }
+                
+                // 删除卷
+                repository?.deleteVolume(userId, workId, volume.id)
+                
+                // 重新加载卷列表
+                val updatedVolumes = repository?.getVolumes(userId, workId) ?: emptyList()
+                _volumes.value = updatedVolumes
+                
+                // 如果删除的是当前展开的卷，收起它
+                if (_expandedVolumeId.value == volume.id) {
+                    _expandedVolumeId.value = null
+                }
+                
+                _events.emit(Event.ShowToast("卷删除成功", false))
+            } catch (e: Exception) {
+                _events.emit(Event.ShowToast("删除卷失败: ${e.message}", true))
+            }
+        }
+    }
+    
+    /**
+     * 删除章节
+     */
+    fun deleteChapter(volumeId: String, chapterId: String) {
+        viewModelScope.launch {
+            try {
+                repository?.deleteVolumeChapter(userId, workId, volumeId, chapterId)
+
+                // 更新本地缓存
+                val currentMap = _chaptersByVolume.value.toMutableMap()
+                currentMap[volumeId] = currentMap[volumeId]?.filter { it.id != chapterId } ?: emptyList()
+                _chaptersByVolume.value = currentMap
+
+                _events.emit(Event.ShowToast("章节删除成功", false))
+            } catch (e: Exception) {
+                _events.emit(Event.ShowToast("删除章节失败: ${e.message}", true))
+            }
+        }
+    }
+
     /**
      * 打开章节
      * 对应 Vue 代码中的 openChapter 方法
@@ -250,27 +397,41 @@ class VolumedWorkViewModel : ViewModel() {
     fun isVolumeLoaded(volumeId: String): Boolean {
         return loadedVolumeIds.contains(volumeId)
     }
+
+    /**
+     * 公开的非挂起版本，供 Composable 的 LaunchedEffect 调用
+     */
+    fun loadVolumeChaptersAsync(volumeId: String) {
+        viewModelScope.launch { loadVolumeChapters(volumeId) }
+    }
     
     /**
-     * 获取章节编号（全局连续编号）
-     * 对应 Vue 代码中的 getChapterNumber 方法
+     * 获取章节在卷内的序号（从1开始）
+     * 正序：第1章、第2章...
+     * 倒序：显示时反转，但序号仍按原始顺序
      */
-    fun getChapterNumber(volumeId: String, chapterIndex: Int, sortOrder: String): Int {
-        var num = 1
-        val currentVolumes = if (sortOrder == "desc") volumes.value.reversed() else volumes.value
-        
-        for (vol in currentVolumes) {
-            if (vol.id == volumeId) {
-                // 当前卷，加上章节在卷内的索引
-                val chapters = chaptersByVolume.value[volumeId] ?: emptyList()
-                val actualIndex = if (sortOrder == "desc") chapters.size - 1 - chapterIndex else chapterIndex
-                return num + actualIndex
-            }
-            // 还没到当前卷，累加前面卷的章节数
-            num += (chaptersByVolume.value[vol.id]?.size ?: 0)
+    fun getChapterNumber(volumeId: String, displayIndex: Int, sortOrder: String): Int {
+        val chapters = chaptersByVolume.value[volumeId] ?: return displayIndex + 1
+        return if (sortOrder == "desc") {
+            // 倒序显示时，第一个显示的是最后一章，序号应该是 chapters.size
+            chapters.size - displayIndex
+        } else {
+            displayIndex + 1
         }
-        
-        return num + chapterIndex
+    }
+
+    /**
+     * 判断某章节是否是全局最后一章（用于显示"写作中"标签）
+     * 全局最后一章 = 最后一个卷（正序）的最后一章
+     */
+    fun isLastChapterGlobally(volumeId: String, chapterId: String): Boolean {
+        val sortedVolumes = volumes.value.sortedBy { it.order }
+        if (sortedVolumes.isEmpty()) return false
+        val lastVolume = sortedVolumes.last()
+        if (lastVolume.id != volumeId) return false
+        val chapters = chaptersByVolume.value[volumeId] ?: return false
+        if (chapters.isEmpty()) return false
+        return chapters.last().id == chapterId
     }
     
     /**
