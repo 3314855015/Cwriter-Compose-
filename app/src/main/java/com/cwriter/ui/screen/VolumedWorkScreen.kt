@@ -1,555 +1,555 @@
 package com.cwriter.ui.screen
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.cwriter.data.model.Volume
 import com.cwriter.data.model.Chapter
-import com.cwriter.ui.theme.DarkPrimary
-import com.cwriter.ui.viewmodel.VolumedWorkViewModel
+import com.cwriter.data.model.Volume
 import com.cwriter.ui.components.CatalogPanel
+import com.cwriter.ui.components.CreateChapterDialog
+import com.cwriter.ui.components.CreateVolumeDialog
+import com.cwriter.ui.components.RenameVolumeDialog
 import com.cwriter.ui.components.VolumeActionMenu
-import com.cwriter.ui.components.ChapterActionMenu
+import com.cwriter.ui.theme.CWriterTheme
+import com.cwriter.ui.theme.LocalIsDark
+import com.cwriter.ui.viewmodel.VolumedWorkViewModel
 
-/**
- * 分卷作品管理页面 - 从 Vue3 代码移植
- * 功能：展示卷和章节列表，支持创建/删除卷和章节
- */
-@OptIn(ExperimentalMaterial3Api::class)
+// ===== 主题色（亮/暗两套，来自 UniApp）=====
+private val BgPageLight       = Color(0xFFF5F5F5)
+private val BgPageDark        = Color(0xFF1A1A1A)
+private val BgCardLight       = Color(0xFFFFFFFF)
+private val BgCardDark        = Color(0xFF2D2D2D)
+private val BgHeaderLight     = Color(0xFFFFFFFF)
+private val BgHeaderDark      = Color(0xFF2D2D2D)
+private val BgChapterLight    = Color(0xFFF5F5F5)
+private val BgChapterDark     = Color(0xFF252525)
+private val TextMainLight     = Color(0xFF333333)
+private val TextMainDark      = Color(0xFFFFFFFF)
+private val TextSubLight      = Color(0xFF666666)
+private val TextSubDark       = Color(0xFFB3B3B3)
+private val TextHintLight     = Color(0xFFB3B3B3)
+private val TextHintDark      = Color(0xFF808080)
+private val BorderLight       = Color(0xFFE0E0E0)
+private val BorderDark        = Color(0xFF404040)
+private val DividerLight      = Color(0xFFF0F0F0)
+private val DividerDark       = Color(0xFF333333)
+private val Orange            = Color(0xFFFF6B35)
+
 @Composable
 fun VolumedWorkScreen(
     userId: String,
     workId: String,
     onNavigateBack: () -> Unit,
-    onNavigateToEditor: (String, String, String) -> Unit, // workId, chapterId, volumeId
+    onNavigateToEditor: (String, String, String) -> Unit,
     viewModel: VolumedWorkViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    
-    // 状态订阅
-    val workInfo by viewModel.workInfo.collectAsState()
-    val volumes by viewModel.volumes.collectAsState()
+    val isDark = LocalIsDark.current
+
+    // 动态颜色
+    val bgPage     = if (isDark) BgPageDark     else BgPageLight
+    val bgCard     = if (isDark) BgCardDark     else BgCardLight
+    val bgHeader   = if (isDark) BgHeaderDark   else BgHeaderLight
+    val textMain   = if (isDark) TextMainDark   else TextMainLight
+    val textSub    = if (isDark) TextSubDark    else TextSubLight
+    val textHint   = if (isDark) TextHintDark   else TextHintLight
+    val border     = if (isDark) BorderDark     else BorderLight
+    val divider    = if (isDark) DividerDark    else DividerLight
+
+    val workInfo        by viewModel.workInfo.collectAsState()
+    val volumes         by viewModel.volumes.collectAsState()
     val chaptersByVolume by viewModel.chaptersByVolume.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val sortOrder by viewModel.sortOrder.collectAsState()
+    val isLoading       by viewModel.isLoading.collectAsState()
+    val sortOrder       by viewModel.sortOrder.collectAsState()
     val expandedVolumeId by viewModel.expandedVolumeId.collectAsState()
-    
-    // 本地 UI 状态
-    var showCatalog by remember { mutableStateOf(false) }
-    var showCreateChapterModal by remember { mutableStateOf(false) }
-    var showCreateVolumeModal by remember { mutableStateOf(false) }
-    var showRenameVolumeModal by remember { mutableStateOf(false) }
-    var showVolumeMenu by remember { mutableStateOf(false) }
-    var currentEditingVolume by remember { mutableStateOf<Volume?>(null) }
-    
-    // 初始化
+
+    var showCatalog             by remember { mutableStateOf(false) }
+    var showCreateChapterModal  by remember { mutableStateOf(false) }
+    var showCreateVolumeModal   by remember { mutableStateOf(false) }
+    var showRenameVolumeModal   by remember { mutableStateOf(false) }
+    var showVolumeMenu          by remember { mutableStateOf(false) }
+    var currentEditingVolume    by remember { mutableStateOf<Volume?>(null) }
+
     LaunchedEffect(userId, workId) {
         viewModel.init(context, userId, workId)
     }
-    
-    // 监听 ViewModel 事件
+
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
-                is VolumedWorkViewModel.Event.ShowToast -> {
-                    // 显示 Toast
-                }
+                is VolumedWorkViewModel.Event.ShowToast -> { /* TODO: snackbar */ }
                 is VolumedWorkViewModel.Event.NavigateToEditor -> {
                     onNavigateToEditor(event.workId, event.chapterId, event.volumeId)
                 }
             }
         }
     }
-    
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Text(workInfo.title ?: "加载中...") 
-                },
-                navigationIcon = {
-                    // 左侧菜单图标
-                    IconButton(onClick = { showCatalog = !showCatalog }) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            repeat(3) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(20.dp)
-                                        .height(2.dp)
-                                        .background(Color(0xFFB3B3B3))
-                                )
+
+    // 正序/倒序后的卷列表（卷顺序变化，但卷名不变）
+    val displayVolumes = remember(volumes, sortOrder) {
+        if (sortOrder == "desc") volumes.reversed() else volumes
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgPage)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            VolumedTopBar(
+                title       = workInfo.title.ifEmpty { "加载中..." },
+                bgHeader    = bgHeader,
+                textMain    = textMain,
+                textSub     = textSub,
+                border      = border,
+                onMenuClick = { showCatalog = true },
+                onCloseClick = onNavigateBack
+            )
+
+            if (isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Orange)
+                }
+            } else {
+                SectionHeader(
+                    totalChapters = volumes.sumOf { chaptersByVolume[it.id]?.size ?: 0 },
+                    sortOrder     = sortOrder,
+                    textMain      = textMain,
+                    textHint      = textHint,
+                    onToggleSort  = { viewModel.toggleSortOrder() }
+                )
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        AddVolumeCell(onClick = { showCreateVolumeModal = true })
+                    }
+
+                    if (volumes.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 60.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("还没有创建卷", color = textHint, fontSize = 15.sp)
                             }
                         }
-                    }
-                },
-                actions = {
-                    // 右侧关闭按钮
-                    TextButton(onClick = onNavigateBack) {
-                        Text(
-                            text = "X",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight(500),
-                            color = Color(0xFFB3B3B3)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        },
-        floatingActionButton = {
-            // FAB 按钮
-            FloatingActionButton(
-                onClick = { 
-                    if (volumes.isEmpty()) {
-                        showCreateVolumeModal = true
                     } else {
-                        showCreateChapterModal = true
+                        // 用 displayVolumes（已按正/倒序排列），卷名和卷数据完全对应
+                        items(displayVolumes, key = { it.id }) { volume ->
+                            VolumeCard(
+                                volume       = volume,
+                                chapters     = chaptersByVolume[volume.id] ?: emptyList(),
+                                isExpanded   = expandedVolumeId == volume.id,
+                                isLoaded     = viewModel.isVolumeLoaded(volume.id),
+                                sortOrder    = sortOrder,
+                                bgCard       = bgCard,
+                                bgChapter    = if (isDark) BgChapterDark else BgChapterLight,
+                                textMain     = textMain,
+                                textSub      = textSub,
+                                textHint     = textHint,
+                                divider      = divider,
+                                getChapterNumber = { idx -> viewModel.getChapterNumber(volume.id, idx, sortOrder) },
+                                isLastGlobally   = { chapterId -> viewModel.isLastChapterGlobally(volume.id, chapterId) },
+                                formatTime   = { ts -> viewModel.formatTime(ts) },
+                                onToggleExpand = { viewModel.toggleVolumeExpand(volume.id) },
+                                onLongPress  = { currentEditingVolume = volume; showVolumeMenu = true },
+                                onChapterClick = { chapter -> viewModel.openChapter(chapter) }
+                            )
+                        }
                     }
-                },
-                containerColor = Color(0xFFFF6B35),
-                modifier = Modifier
-                    .size(56.dp)
-            ) {
-                Text(
-                    text = "+",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight(300),
-                    color = Color.White
-                )
+
+                    item { Spacer(Modifier.height(80.dp)) }
+                }
             }
         }
-    ) { padding ->
-        Box(
+
+        // FAB
+        FloatingActionButton(
+            onClick = {
+                if (volumes.isEmpty()) showCreateVolumeModal = true
+                else showCreateChapterModal = true
+            },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 28.dp)
+                .size(56.dp),
+            shape = CircleShape,
+            containerColor = Orange,
+            elevation = FloatingActionButtonDefaults.elevation(6.dp)
         ) {
-            // 主内容区域
-            Column(
-                modifier = Modifier.fillMaxSize()
+            Text("+", fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Light)
+        }
+
+        // 目录抽屉
+        if (showCatalog) {
+            CatalogPanel(
+                isVisible    = true,
+                isDark       = isDark,
+                onDismiss    = { showCatalog = false },
+                onOpenChapter = { chapter -> viewModel.openChapter(chapter) },
+                viewModel    = viewModel
+            )
+        }
+
+        if (showVolumeMenu && currentEditingVolume != null) {
+            VolumeActionMenu(
+                onDismiss = { showVolumeMenu = false },
+                onRename  = { showVolumeMenu = false; showRenameVolumeModal = true },
+                onDelete  = { showVolumeMenu = false; viewModel.confirmDeleteVolume(currentEditingVolume!!) }
+            )
+        }
+
+        if (showCreateVolumeModal) {
+            CreateVolumeDialog(
+                onDismiss = { showCreateVolumeModal = false },
+                onConfirm = { name, desc -> showCreateVolumeModal = false; viewModel.createVolume(name, desc) }
+            )
+        }
+
+        if (showCreateChapterModal) {
+            CreateChapterDialog(
+                volumes   = volumes,
+                onDismiss = { showCreateChapterModal = false },
+                onConfirm = { title, content, volumeId ->
+                    showCreateChapterModal = false
+                    viewModel.createChapter(title, content, volumeId)
+                }
+            )
+        }
+
+        if (showRenameVolumeModal && currentEditingVolume != null) {
+            RenameVolumeDialog(
+                currentName = currentEditingVolume!!.title,
+                onDismiss   = { showRenameVolumeModal = false; currentEditingVolume = null },
+                onConfirm   = { newName ->
+                    showRenameVolumeModal = false
+                    currentEditingVolume?.let { viewModel.renameVolume(it.id, newName) }
+                    currentEditingVolume = null
+                }
+            )
+        }
+    }
+}
+
+// ─── 顶栏 ────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun VolumedTopBar(
+    title: String,
+    bgHeader: Color,
+    textMain: Color,
+    textSub: Color,
+    border: Color,
+    onMenuClick: () -> Unit,
+    onCloseClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bgHeader)
+            .padding(start = 4.dp, end = 4.dp, top = 26.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onMenuClick) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                repeat(3) {
+                    Box(
+                        modifier = Modifier
+                            .width(20.dp)
+                            .height(2.dp)
+                            .background(textSub, RoundedCornerShape(1.dp))
+                    )
+                }
+            }
+        }
+        Text(
+            text      = title,
+            modifier  = Modifier.weight(1f),
+            fontSize  = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color     = textMain,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines  = 1,
+            overflow  = TextOverflow.Ellipsis
+        )
+        TextButton(onClick = onCloseClick) {
+            Text("X", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = textSub)
+        }
+    }
+    HorizontalDivider(color = border, thickness = 0.5.dp)
+}
+
+// ─── 标题行 ──────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SectionHeader(
+    totalChapters: Int,
+    sortOrder: String,
+    textMain: Color,
+    textHint: Color,
+    onToggleSort: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("章节列表", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = textMain)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("共 $totalChapters 章", fontSize = 13.sp, color = textHint)
+            val arrowRotation by animateFloatAsState(
+                targetValue = if (sortOrder == "desc") 180f else 0f,
+                animationSpec = tween(200), label = "sort_arrow"
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Orange.copy(alpha = 0.12f))
+                    .border(1.dp, Orange.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                    .clickable(onClick = onToggleSort)
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
             ) {
-                // 头部统计栏
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "章节列表",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight(600),
-                        color = MaterialTheme.colorScheme.onBackground
+                        text = if (sortOrder == "asc") "正序" else "倒序",
+                        fontSize = 13.sp, color = Orange, fontWeight = FontWeight.Medium
                     )
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // 章节总数
-                        Text(
-                            text = "共 ${volumes.sumOf { chaptersByVolume[it.id]?.size ?: 0 }} 章",
-                            fontSize = 14.sp,
-                            color = Color(0xFFB3B3B3)
-                        )
-                        
-                        // 排序切换
-                        Surface(
-                            modifier = Modifier.clickable { 
-                                viewModel.toggleSortOrder()
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFFFF6B35).copy(alpha = 0.15f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (sortOrder == "asc") "正序" else "倒序",
-                                    fontSize = 13.sp,
-                                    color = Color(0xFFFF6B35),
-                                    fontWeight = FontWeight(500)
-                                )
-                                Text(
-                                    text = "↓",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFFF6B35),
-                                    modifier = Modifier.rotate(if (sortOrder == "desc") 180f else 0f)
-                                )
-                            }
-                        }
-                    }
+                    Text("↓", fontSize = 12.sp, color = Orange,
+                        modifier = Modifier.rotate(arrowRotation))
                 }
-                
-                // 内容区域
-                if (isLoading) {
+            }
+        }
+    }
+}
+
+// ─── 新增卷按钮 ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun AddVolumeCell(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(Orange.copy(alpha = 0.08f))
+            .border(2.dp, Orange.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Orange.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("+", fontSize = 20.sp, color = Orange, fontWeight = FontWeight.Light)
+            }
+            Spacer(Modifier.width(12.dp))
+            Text("新增卷", fontSize = 15.sp, color = Orange, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+// ─── 卷卡片 ──────────────────────────────────────────────────────────────────
+
+@Composable
+private fun VolumeCard(
+    volume: Volume,
+    chapters: List<Chapter>,
+    isExpanded: Boolean,
+    isLoaded: Boolean,
+    sortOrder: String,
+    bgCard: Color,
+    bgChapter: Color,
+    textMain: Color,
+    textSub: Color,
+    textHint: Color,
+    divider: Color,
+    getChapterNumber: (Int) -> Int,
+    isLastGlobally: (String) -> Boolean,
+    formatTime: (String) -> String,
+    onToggleExpand: () -> Unit,
+    onLongPress: () -> Unit,
+    onChapterClick: (Chapter) -> Unit
+) {
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 90f else 0f,
+        animationSpec = tween(200), label = "volume_arrow"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = bgCard,
+        shadowElevation = 1.dp,
+        tonalElevation = 0.dp
+    ) {
+        Column {
+            // 卷头行
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { onToggleExpand() },
+                            onLongPress = { onLongPress() }
+                        )
+                    }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "›",
+                    fontSize = 20.sp,
+                    color = textHint,
+                    modifier = Modifier.rotate(arrowRotation)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = volume.name.ifEmpty { volume.title.ifEmpty { "未命名卷" } },
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textMain,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(text = "${chapters.size}章", fontSize = 13.sp, color = textHint)
+            }
+
+            if (isExpanded) {
+                HorizontalDivider(color = divider, thickness = 0.5.dp)
+
+                if (!isLoaded) {
+                    // 新建卷已预标记为已加载，这里只有真正懒加载时才会出现
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth().padding(20.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Orange)
                     }
-                } else if (volumes.isEmpty()) {
-                    // 空状态
-                    EmptyVolumesState(
-                        onCreateClick = { showCreateVolumeModal = true }
-                    )
-                } else {
-                    // 卷列表
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                } else if (chapters.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        // 新增卷按钮
-                        item {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showCreateVolumeModal = true },
-                                shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFFFF6B35).copy(alpha = 0.1f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(14.dp, 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .background(
-                                                Color(0xFFFF6B35).copy(alpha = 0.2f),
-                                                shape = RoundedCornerShape(16.dp)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "+",
-                                            fontSize = 20.sp,
-                                            color = Color(0xFFFF6B35),
-                                            fontWeight = FontWeight(300)
-                                        )
-                                    }
-                                    
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    
-                                    Text(
-                                        text = "新增卷",
-                                        fontSize = 15.sp,
-                                        color = Color(0xFFFF6B35),
-                                        fontWeight = FontWeight(500)
-                                    )
-                                }
-                            }
-                        }
-                        
-                        // 卷列表
-                        items(volumes) { volume ->
-                            VolumeItem(
-                                volume = volume,
-                                chapters = chaptersByVolume[volume.id] ?: emptyList(),
-                                isExpanded = expandedVolumeId == volume.id,
-                                sortOrder = sortOrder,
-                                onToggleExpand = { 
-                                    viewModel.toggleVolumeExpand(volume.id)
-                                },
-                                onVolumeLongClick = { 
-                                    currentEditingVolume = volume
-                                    showVolumeMenu = true
-                                },
-                                onChapterClick = { chapter ->
-                                    viewModel.openChapter(chapter)
-                                },
-                                onChapterLongClick = { chapter ->
-                                    // 显示章节操作菜单
-                                },
-                                onLoadChapters = {
-                                    viewModel.loadVolumeChapters(volume.id)
-                                }
+                        Text("暂无章节", fontSize = 13.sp, color = textHint)
+                    }
+                } else {
+                    // 倒序时反转章节列表，但序号由 getChapterNumber 根据 displayIndex 计算
+                    val displayChapters = if (sortOrder == "desc") chapters.reversed() else chapters
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(bgChapter)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        displayChapters.forEachIndexed { displayIndex, chapter ->
+                            ChapterRow(
+                                chapter       = chapter,
+                                chapterNumber = getChapterNumber(displayIndex),
+                                timeText      = formatTime(chapter.updatedAt.toString()),
+                                isWriting     = isLastGlobally(chapter.id),
+                                textMain      = textMain,
+                                textHint      = textHint,
+                                onClick       = { onChapterClick(chapter) }
                             )
                         }
                     }
                 }
             }
-            
-            // 目录栏
-            if (showCatalog) {
-                CatalogPanel(
-                    isVisible = showCatalog,
-                    onDismiss = { showCatalog = false },
-                    onOpenChapter = { chapter ->
-                        viewModel.openChapter(chapter)
-                    }
-                )
-            }
-            
-            // 卷操作菜单
-            if (showVolumeMenu && currentEditingVolume != null) {
-                VolumeActionMenu(
-                    onDismiss = { showVolumeMenu = false },
-                    onRename = {
-                        showVolumeMenu = false
-                        showRenameVolumeModal = true
-                    },
-                    onDelete = {
-                        showVolumeMenu = false
-                        viewModel.confirmDeleteVolume(currentEditingVolume!!)
-                    }
-                )
-            }
         }
     }
 }
 
-/**
- * 空状态组件
- */
+// ─── 章节行 ──────────────────────────────────────────────────────────────────
+
 @Composable
-fun EmptyVolumesState(onCreateClick: () -> Unit) {
-    Column(
+private fun ChapterRow(
+    chapter: Chapter,
+    chapterNumber: Int,
+    timeText: String,
+    isWriting: Boolean,       // true = 全局最后一章（写作中），false = 已完成
+    textMain: Color,
+    textHint: Color,
+    onClick: () -> Unit
+) {
+    Row(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(60.dp, 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // 这里应该有一个图标，但为简化暂时用文本
-        Text(
-            text = "📚",
-            fontSize = 64.sp,
-            modifier = Modifier.alpha(0.5f)
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Text(
-            text = "还没有创建卷",
-            fontSize = 16.sp,
-            color = Color(0xFFB3B3B3),
-            modifier = Modifier.padding(bottom = 20.dp)
-        )
-        
-        Surface(
-            modifier = Modifier.clickable(onClick = onCreateClick),
-            shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFFF6B35)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "第${chapterNumber}章 ${chapter.title.ifEmpty { "未命名章节" }}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = textMain,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${chapter.wordCount}字", fontSize = 12.sp, color = textHint)
+                Text(timeText, fontSize = 12.sp, color = textHint)
+            }
+        }
+
+        // 状态标签：只有全局最后一章显示橙色"写作中"，其余显示灰色"已完成"
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(
+                    if (isWriting) Orange else Color(0xFFCCCCCC)
+                )
+                .padding(horizontal = 7.dp, vertical = 3.dp)
         ) {
             Text(
-                text = "创建第一个卷",
-                modifier = Modifier.padding(12.dp, 24.dp),
-                fontSize = 14.sp,
-                fontWeight = FontWeight(500),
-                color = Color.White
+                text = if (isWriting) "写作中" else "已完成",
+                fontSize = 10.sp,
+                color = if (isWriting) Color.White else Color(0xFF888888)
             )
         }
     }
 }
 
-/**
- * 卷列表项组件
- */
-@Composable
-fun VolumeItem(
-    volume: Volume,
-    chapters: List<Chapter>,
-    isExpanded: Boolean,
-    sortOrder: String,
-    onToggleExpand: () -> Unit,
-    onVolumeLongClick: () -> Unit,
-    onChapterClick: (Chapter) -> Unit,
-    onChapterLongClick: (Chapter) -> Unit,
-    onLoadChapters: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = Color(0xFF2D2D2D).copy(alpha = 0.6f)
-    ) {
-        Column {
-            // 卷头
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onToggleExpand() }
-                // TODO: 添加长按事件
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp, 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 展开图标
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .rotate(if (isExpanded) 90f else 0f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "›",
-                            fontSize = 18.sp,
-                            color = Color(0xFFB3B3B3),
-                            fontWeight = FontWeight(300)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    // 卷标题
-                    Text(
-                        text = volume.name ?: "未命名卷",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight(600),
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    // 章节数量
-                    Text(
-                        text = "${chapters.size}章",
-                        fontSize = 13.sp,
-                        color = Color(0xFFB3B3B3)
-                    )
-                }
-            }
-            
-            // 卷内章节（可展开）
-            if (isExpanded) {
-                if (chapters.isEmpty() && !viewModel.isVolumeLoaded(volume.id)) {
-                    // 加载中
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                    
-                    // 触发加载
-                    LaunchedEffect(Unit) {
-                        onLoadChapters()
-                    }
-                } else {
-                    // 章节列表
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val displayChapters = if (sortOrder == "desc") chapters.reversed() else chapters
-                        
-                        displayChapters.forEachIndexed { index, chapter ->
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onChapterClick(chapter) }
-                                // TODO: 添加长按事件
-                                ,
-                                shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFF323232).copy(alpha = 0.7f)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp, 16.dp)
-                                ) {
-                                    // 章节标题
-                                    Text(
-                                        text = "第${viewModel.getChapterNumber(volume.id, index, sortOrder)}章 ${chapter.title ?: "未命名章节"}",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight(500),
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    
-                                    // 元信息
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Text(
-                                            text = "${chapter.wordCount}字",
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF888888)
-                                        )
-                                        Text(
-                                            text = viewModel.formatTime(chapter.updatedAt),
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF888888)
-                                        )
-                                    }
-                                    
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    
-                                    // 状态
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = if (chapter.isCompleted) Color(0xFF4ECDC4) else Color(0xFFFF6B35)
-                                    ) {
-                                        Text(
-                                            text = if (chapter.isCompleted) "已完成" else "写作中",
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                            fontSize = 10.sp,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 获取章节编号（全局连续编号）
- * 与 Vue 版本保持一致
- */
-fun getChapterNumber(
-    volumes: List<Volume>,
-    chaptersByVolume: Map<String, List<Chapter>>,
-    volumeId: String,
-    chapterIndex: Int,
-    sortOrder: String
-): Int {
-    var num = 1
-    val currentVolumes = if (sortOrder == "desc") volumes.reversed() else volumes
-    
-    for (vol in currentVolumes) {
-        if (vol.id == volumeId) {
-            // 当前卷，加上章节在卷内的索引
-            val chapters = chaptersByVolume[volumeId] ?: emptyList()
-            val actualIndex = if (sortOrder == "desc") chapters.size - 1 - chapterIndex else chapterIndex
-            return num + actualIndex
-        }
-        // 还没到当前卷，累加前面卷的章节数
-        num += (chaptersByVolume[vol.id]?.size ?: 0)
-    }
-    
-    return num + chapterIndex
-}

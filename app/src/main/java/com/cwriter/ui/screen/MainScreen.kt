@@ -21,6 +21,7 @@ import androidx.navigation.NavHostController
 import com.cwriter.navigation.Screen
 import com.cwriter.ui.theme.AccentOrange
 import com.cwriter.ui.theme.CWriterTheme
+import com.cwriter.ui.theme.LocalIsDark
 
 // 主题模式：只保留 UniApp 对应的两档
 enum class ThemeMode { LIGHT, DARK }
@@ -78,6 +79,7 @@ fun MainScreen(
 
     // 用当前主题包裹整个 Scaffold
     CWriterTheme(darkTheme = isDark) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalIsDark provides isDark) {
         Scaffold(
             bottomBar = {
                 Column {
@@ -144,6 +146,7 @@ fun MainScreen(
                 }
             }
         }
+        } // CompositionLocalProvider
     }
 }
 
