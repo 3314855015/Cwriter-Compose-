@@ -1,8 +1,8 @@
 package com.cwriter.ui.screen
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,7 +60,6 @@ fun HomeScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var selectedTab      by remember { mutableIntStateOf(0) }
-    var isFabMenuOpen    by remember { mutableStateOf(false) }
 
     // 动态颜色（根据 isDark 选择 UniApp 色值）
     val homeBg        = if (isDark) HomeBgDark            else HomeBgLight
@@ -147,31 +145,8 @@ fun HomeScreen(
             }
         }
 
-        // 点击背景关闭 FAB 菜单
-        if (isFabMenuOpen) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { isFabMenuOpen = false }
-            )
-        }
-
-        AnimatedVisibility(
-            visible  = isFabMenuOpen,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 88.dp),
-            enter = fadeIn() + scaleIn(transformOrigin = TransformOrigin(1f, 1f)),
-            exit  = fadeOut() + scaleOut(transformOrigin = TransformOrigin(1f, 1f))
-        ) {
-            FabMenuItem(
-                label   = "作品",
-                onClick = { isFabMenuOpen = false; showCreateDialog = true }
-            )
-        }
-
         FloatingActionButton(
-            onClick        = { isFabMenuOpen = !isFabMenuOpen },
+            onClick        = { showCreateDialog = true },
             containerColor = AccentOrange,
             shape          = CircleShape,
             modifier       = Modifier
@@ -180,10 +155,10 @@ fun HomeScreen(
                 .size(52.dp)
         ) {
             Icon(
-                imageVector    = if (isFabMenuOpen) Icons.Default.Close else Icons.Default.Add,
-                contentDescription = if (isFabMenuOpen) "关闭" else "创建",
-                tint           = Color.White,
-                modifier       = Modifier.size(24.dp)
+                imageVector        = Icons.Default.Add,
+                contentDescription = "创建作品",
+                tint               = Color.White,
+                modifier           = Modifier.size(24.dp)
             )
         }
     }
@@ -324,7 +299,10 @@ private fun TabBar(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .clickable { onTabSelected(index) }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onTabSelected(index) }
                     .padding(vertical = 10.dp)
             ) {
                 Text(
@@ -424,32 +402,6 @@ private fun EmptyWorksState(onCreateClick: () -> Unit, textTertiary: Color) {
         Text(text = "还没有作品", fontSize = 16.sp, color = textTertiary)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = "点击右下角按钮开始创作", fontSize = 13.sp, color = Color(0xFFCCCCCC))
-    }
-}
-
-// ===== FAB 菜单项 =====
-@Composable
-private fun FabMenuItem(label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                androidx.compose.ui.graphics.Brush.linearGradient(
-                    colors = listOf(Color(0xFFFF9A9E), Color(0xFFFFD0C4))
-                )
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Description,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(16.dp)
-        )
-        Text(text = label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
