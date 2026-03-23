@@ -293,7 +293,7 @@ fun CreateWorkDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var structureType by remember { mutableStateOf(Work.StructureType.CHAPTERIZED) }
+    var structureType by remember { mutableStateOf(Work.StructureType.VOLUMED) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -322,9 +322,9 @@ fun CreateWorkDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
-                        selected = structureType == Work.StructureType.CHAPTERIZED,
-                        onClick = { structureType = Work.StructureType.CHAPTERIZED },
-                        label = { Text("分章节") }
+                        selected = structureType == Work.StructureType.VOLUMED,
+                        onClick = { structureType = Work.StructureType.VOLUMED },
+                        label = { Text("分卷") }
                     )
                     FilterChip(
                         selected = structureType == Work.StructureType.SINGLE,
