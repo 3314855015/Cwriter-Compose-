@@ -25,6 +25,8 @@ import com.cwriter.data.model.Chapter
 import com.cwriter.ui.theme.DarkPrimary
 import com.cwriter.ui.viewmodel.VolumedWorkViewModel
 import com.cwriter.ui.components.CatalogPanel
+import com.cwriter.ui.components.VolumeActionMenu
+import com.cwriter.ui.components.ChapterActionMenu
 
 /**
  * 分卷作品管理页面 - 从 Vue3 代码移植
@@ -522,39 +524,6 @@ fun VolumeItem(
             }
         }
     }
-}
-
-/**
- * 卷操作菜单
- */
-@Composable
-fun VolumeActionMenu(
-    onDismiss: () -> Unit,
-    onRename: () -> Unit,
-    onDelete: () -> Unit
-) {
-    // TODO: 实现底部弹出菜单
-    // 由于 Material3 的 ModalBottomSheet 在 Compose 中实现较复杂，
-    // 这里用简单的 AlertDialog 代替
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("卷操作") },
-        text = {
-            Column {
-                TextButton(onClick = onRename) {
-                    Text("修改卷名")
-                }
-                TextButton(onClick = onDelete) {
-                    Text("删除卷", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 /**
