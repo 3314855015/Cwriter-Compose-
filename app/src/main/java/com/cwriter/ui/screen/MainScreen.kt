@@ -3,8 +3,8 @@ package com.cwriter.ui.screen
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -12,11 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -24,138 +20,86 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.cwriter.navigation.Screen
 import com.cwriter.ui.theme.AccentOrange
-import com.cwriter.ui.theme.DarkSurface
+import com.cwriter.ui.theme.CWriterTheme
 
-/**
- * MainScreen - 主页面容器
- * 包含底部导航栏，使用 Navigation Compose 管理页面切换
- */
+// 主题模式：只保留 UniApp 对应的两档
+enum class ThemeMode { LIGHT, DARK }
 
-// 底部导航项数据类
-sealed class BottomNavItem(
-    val route: String,
+private data class NavItem(
     val title: String,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
-) {
-    object Home : BottomNavItem(
-        route = "home",
-        title = "首页",
-        selectedIcon = Icons.Filled.Home,
-        unselectedIcon = Icons.Outlined.Home
-    )
-    object Theme : BottomNavItem(
-        route = "theme",
-        title = "主题",
-        selectedIcon = Icons.Filled.DarkMode,
-        unselectedIcon = Icons.Outlined.DarkMode
-    )
-    object Manage : BottomNavItem(
-        route = "manage",
-        title = "管理",
-        selectedIcon = Icons.Filled.Dashboard,
-        unselectedIcon = Icons.Outlined.Dashboard
-    )
-    object Service : BottomNavItem(
-        route = "service",
-        title = "服务",
-        selectedIcon = Icons.Filled.MenuBook,
-        unselectedIcon = Icons.Outlined.MenuBook
-    )
-    object Profile : BottomNavItem(
-        route = "profile",
-        title = "我的",
-        selectedIcon = Icons.Filled.Person,
-        unselectedIcon = Icons.Outlined.Person
-    )
-}
+)
 
-// 主题模式
-enum class ThemeMode {
-    LIGHT,      // 浅色
-    DARK,       // 深色
-    SYSTEM      // 跟随系统
-}
+private val navItems = listOf(
+    NavItem("首页",  Icons.Filled.Home,      Icons.Outlined.Home),
+    NavItem("主题",  Icons.Filled.WbSunny,   Icons.Outlined.WbSunny),   // icon 会被动态替换
+    NavItem("管理",  Icons.Filled.Dashboard,  Icons.Outlined.Dashboard),
+    NavItem("服务",  Icons.Filled.MenuBook,   Icons.Outlined.MenuBook),
+    NavItem("我的",  Icons.Filled.Person,     Icons.Outlined.Person),
+)
+
+// 导航栏颜色（亮/暗两套，来自 UniApp themeManager）
+private val BottomNavBgLight       = Color(0xFFFFFFFF)
+private val BottomNavBgDark        = Color(0xFF2D2D2D)
+private val BottomNavBorderLight   = Color(0xFFEEEEEE)
+private val BottomNavBorderDark    = Color(0xFF404040)
+private val BottomNavUnselected    = Color(0xFF999999)
 
 @Composable
 fun MainScreen(
     navController: NavHostController,
-    userId: String = "default_user",
-    currentThemeMode: ThemeMode = ThemeMode.DARK,
-    onThemeChange: (ThemeMode) -> Unit = {}
+    userId: String = "default_user"
 ) {
     val context = LocalContext.current
-    
-    val bottomNavItems = listOf(
-        BottomNavItem.Home,
-        BottomNavItem.Theme,
-        BottomNavItem.Manage,
-        BottomNavItem.Service,
-        BottomNavItem.Profile
-    )
-    
+
+    // 主题状态：从持久化读取，默认跟随系统
+    val systemDark = isSystemInDarkTheme()
+    var themeMode by remember {
+        mutableStateOf(loadThemeMode(context, systemDark))
+    }
+    val isDark = themeMode == ThemeMode.DARK
+
     var selectedTab by remember { mutableIntStateOf(0) }
-    
-    // 获取主题模式对应的图标和文字
-    val themeInfo = when (currentThemeMode) {
-        ThemeMode.LIGHT -> Pair(Icons.Filled.WbSunny, "浅色")
-        ThemeMode.DARK -> Pair(Icons.Filled.DarkMode, "深色")
-        ThemeMode.SYSTEM -> Pair(Icons.Filled.BrightnessAuto, "跟随")
+
+    // 切换：LIGHT ↔ DARK（对应 UniApp toggleTheme）
+    fun toggleTheme() {
+        themeMode = if (isDark) ThemeMode.LIGHT else ThemeMode.DARK
+        saveThemeMode(context, themeMode)
     }
-    
-    // 循环切换到下一个主题
-    fun cycleTheme() {
-        val newMode = when (currentThemeMode) {
-            ThemeMode.LIGHT -> ThemeMode.DARK
-            ThemeMode.DARK -> ThemeMode.SYSTEM
-            ThemeMode.SYSTEM -> ThemeMode.LIGHT
-        }
-        onThemeChange(newMode)
-        // 保存设置
-        saveThemeMode(context, newMode)
-    }
-    
-    Scaffold(
-        bottomBar = {
-            // 自定义底部导航栏（增加底部padding避免被系统手势条遮挡）
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                shadowElevation = 8.dp
-            ) {
+
+    // 主题按钮图标：深色时显示月亮，浅色时显示太阳
+    val themeIcon  = if (isDark) Icons.Filled.DarkMode  else Icons.Filled.WbSunny
+    val themeLabel = if (isDark) "深色" else "浅色"
+
+    // 导航栏动态颜色
+    val bottomNavBg     = if (isDark) BottomNavBgDark     else BottomNavBgLight
+    val bottomNavBorder = if (isDark) BottomNavBorderDark else BottomNavBorderLight
+
+    // 用当前主题包裹整个 Scaffold
+    CWriterTheme(darkTheme = isDark) {
+        Scaffold(
+            bottomBar = {
                 Column {
+                    HorizontalDivider(color = bottomNavBorder, thickness = 0.5.dp)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
-                            .padding(horizontal = 8.dp),
+                            .background(bottomNavBg)
+                            .navigationBarsPadding()
+                            .height(56.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        bottomNavItems.forEachIndexed { index, item ->
+                        navItems.forEachIndexed { index, item ->
                             val isSelected = selectedTab == index
-                            // 主题按钮特殊处理：使用当前主题图标
-                            val icon = if (item is BottomNavItem.Theme) {
-                                themeInfo.first
-                            } else if (isSelected) {
-                                item.selectedIcon
-                            } else {
-                                item.unselectedIcon
+                            val icon = when (index) {
+                                1    -> themeIcon
+                                else -> if (isSelected) item.selectedIcon else item.unselectedIcon
                             }
-                            // 主题按钮文字
-                            val label = if (item is BottomNavItem.Theme) {
-                                themeInfo.second
-                            } else {
-                                item.title
-                            }
-                            
-                            // 发光效果修饰符（仅选中时）
-                            val glowModifier = if (isSelected) {
-                                Modifier.glowEffect()
-                            } else {
-                                Modifier
-                            }
-                            
+                            val label = if (index == 1) themeLabel else item.title
+                            val tint  = if (isSelected) AccentOrange else BottomNavUnselected
+
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center,
@@ -163,126 +107,72 @@ fun MainScreen(
                                     .weight(1f)
                                     .fillMaxHeight()
                                     .clickable {
-                                        if (item is BottomNavItem.Theme) {
-                                            cycleTheme()
-                                        } else {
-                                            selectedTab = index
-                                        }
+                                        if (index == 1) toggleTheme()
+                                        else selectedTab = index
                                     }
-                                    .then(glowModifier)
-                                    .padding(vertical = 6.dp)
                             ) {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = label,
-                                    tint = if (isSelected) AccentOrange else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    tint = tint,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = label,
-                                    fontSize = 10.sp,
-                                    color = if (isSelected) AccentOrange else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
+                                Text(text = label, fontSize = 10.sp, color = tint)
                             }
                         }
                     }
-                    // 系统手势栏安全区域
-                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                when (selectedTab) {
+                    0 -> HomeScreen(
+                        userId = userId,
+                        isDark = isDark,
+                        onNavigateToChapters = { workId ->
+                            navController.navigate(Screen.VolumedWork.createRoute(workId))
+                        }
+                    )
+                    2 -> ManageScreen()
+                    3 -> ServicePlaceholderScreen()
+                    4 -> ProfilePlaceholderScreen()
                 }
             }
         }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // 根据选中标签显示对应内容
-            when (selectedTab) {
-                0, 1 -> HomeScreen( // 主题按钮不切换页面
-                    userId = userId,
-                    onNavigateToChapters = { workId ->
-                        navController.navigate(Screen.Chapters.createRoute(workId))
-                    }
-                )
-                2 -> ManagePlaceholderScreen()
-                3 -> ServicePlaceholderScreen()
-                4 -> ProfilePlaceholderScreen()
-            }
-        }
     }
 }
 
-// 发光效果修饰符
-private fun Modifier.glowEffect(): Modifier = this.drawBehind {
-    // 绘制白色渐变发光
-    drawIntoCanvas { canvas ->
-        val centerX = size.width / 2
-        val centerY = size.height / 2
-        
-        // 底部发光
-        val brush = Brush.radialGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.15f),
-                Color.White.copy(alpha = 0.05f),
-                Color.Transparent
-            ),
-            center = Offset(centerX, centerY + 10f),
-            radius = size.width * 0.8f
-        )
-        
-        drawRect(
-            brush = brush,
-            size = size
-        )
-    }
+// 持久化：保存 / 读取
+fun saveThemeMode(context: Context, mode: ThemeMode) {
+    context.getSharedPreferences("cwriter_prefs", Context.MODE_PRIVATE)
+        .edit().putString("theme_mode", mode.name).apply()
 }
 
-// 保存主题模式到 SharedPreferences
-private fun saveThemeMode(context: Context, mode: ThemeMode) {
-    val prefs = context.getSharedPreferences("cwriter_prefs", Context.MODE_PRIVATE)
-    prefs.edit().putString("theme_mode", mode.name).apply()
-}
-
-// 从 SharedPreferences 读取主题模式
-fun loadThemeMode(context: Context): ThemeMode {
-    val prefs = context.getSharedPreferences("cwriter_prefs", Context.MODE_PRIVATE)
-    val savedMode = prefs.getString("theme_mode", ThemeMode.SYSTEM.name)
-    return try {
-        ThemeMode.valueOf(savedMode ?: ThemeMode.SYSTEM.name)
-    } catch (e: Exception) {
-        ThemeMode.SYSTEM
-    }
-}
-
-// 占位页面
-@Composable
-fun ManagePlaceholderScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("管理功能开发中", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+fun loadThemeMode(context: Context, systemDark: Boolean): ThemeMode {
+    val saved = context.getSharedPreferences("cwriter_prefs", Context.MODE_PRIVATE)
+        .getString("theme_mode", null)
+    return when (saved) {
+        ThemeMode.LIGHT.name -> ThemeMode.LIGHT
+        ThemeMode.DARK.name  -> ThemeMode.DARK
+        else -> if (systemDark) ThemeMode.DARK else ThemeMode.LIGHT  // 首次启动跟随系统
     }
 }
 
 @Composable
 fun ServicePlaceholderScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("服务功能开发中", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("服务功能开发中", color = Color(0xFF999999))
     }
 }
 
 @Composable
 fun ProfilePlaceholderScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("个人中心开发中", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("个人中心开发中", color = Color(0xFF999999))
     }
 }

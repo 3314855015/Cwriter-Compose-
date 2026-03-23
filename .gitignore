@@ -93,4 +93,7 @@ coverage/
 
 #说明文档
 说明文档/
+_ref/
 VOLUMED_WORK_TRANSPLANT.md
+build_output.txt
+.kotlin/sessions/kotlin-compiler-628928882735895073.salive
