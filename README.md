@@ -73,14 +73,24 @@
 
 ```
 app/src/main/java/com/cwriter/
-├── CwriterApp.kt          # Application 类
-├── data/                   # 数据层
-│   └── model/             # 数据模型
-├── ui/                     # UI 层
-│   ├── components/        # 可复用组件
-│   ├── screen/            # 页面
-│   └── theme/             # 主题配置
-└── navigation/            # 导航配置
+├── CwriterApp.kt              # Application 类
+├── navigation/                # 导航配置
+│   ├── NavGraph.kt           # 导航图
+│   └── Screen.kt             # 路由定义
+├── data/                      # 数据层
+│   ├── model/                # 数据模型
+│   │   ├── Work.kt           # 作品模型
+│   │   ├── Chapter.kt        # 章节模型
+│   │   └── Foreshadowing.kt  # 伏笔模型
+│   └── repository/           # 数据仓库
+│       └── FileStorageRepository.kt
+└── ui/                        # UI 层
+    ├── theme/                # 主题配置
+    │   ├── Color.kt          # 颜色定义
+    │   └── Theme.kt          # 主题配置
+    ├── components/           # 可复用组件
+    └── screen/               # 页面（Compose Screen）
+    └── viewmodel/            # 视图模型（ViewModel）
 ```
 
 ## 许可证
