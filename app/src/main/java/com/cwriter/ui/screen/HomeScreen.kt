@@ -39,8 +39,6 @@ fun HomeScreen(
     onNavigateToChapters: (String) -> Unit,
     viewModel: HomeViewModel = viewModel()
 ) {
-    viewModel: HomeViewModel = viewModel()
-) {
     val context = LocalContext.current
 
     // StateFlow → Compose State，自动订阅更新
