@@ -14,7 +14,9 @@ data class Chapter(
     var isCompleted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     var updatedAt: Long = System.currentTimeMillis(),
-    var volumeId: String = ""  // 新增：关联的卷ID
+    var volumeId: String = "",
+    var volumeOrder: Int = 0,   // 卷内序号
+    var globalOrder: Int = 0    // 全局序号（跨卷连续编号）
 ) {
     fun getFormattedTime(): String {
         val date = java.util.Date(updatedAt)
