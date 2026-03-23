@@ -12,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -295,12 +297,9 @@ fun VolumedWorkScreen(
             if (showCatalog) {
                 CatalogPanel(
                     isVisible = showCatalog,
-                    workId = workId,
-                    userId = userId,
-                    workTitle = workInfo.title ?: "",
-                    onClose = { showCatalog = false },
+                    onDismiss = { showCatalog = false },
                     onOpenChapter = { chapter ->
-                        viewModel.openChapterFromCatalog(chapter)
+                        viewModel.openChapter(chapter)
                     }
                 )
             }
