@@ -11,6 +11,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * 首页 ViewModel - MVVM 架构
+ * 使用 StateFlow 实现响应式状态管理，协程处理异步操作
+ */
 class HomeViewModel : ViewModel() {
 
     private var repository: FileStorageRepository? = null

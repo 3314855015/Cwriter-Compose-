@@ -26,6 +26,11 @@ import com.cwriter.navigation.Screen
 import com.cwriter.ui.theme.AccentOrange
 import com.cwriter.ui.theme.DarkSurface
 
+/**
+ * MainScreen - 主页面容器
+ * 包含底部导航栏，使用 Navigation Compose 管理页面切换
+ */
+
 // 底部导航项数据类
 sealed class BottomNavItem(
     val route: String,

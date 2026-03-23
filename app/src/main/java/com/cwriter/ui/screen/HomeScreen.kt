@@ -26,22 +26,33 @@ import com.cwriter.data.model.Work
 import com.cwriter.ui.theme.DarkPrimary
 import com.cwriter.ui.theme.NavBarBackground
 import com.cwriter.ui.viewmodel.HomeViewModel
+import com.cwriter.ui.components.CreateWorkDialog
 
+/**
+ * 首页 Screen - MVVM 架构
+ * View 层：通过 StateFlow 订阅 ViewModel 状态，单向数据流
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     userId: String,
-    onNavigateToCreateWork: () -> Unit,
     onNavigateToChapters: (String) -> Unit,
     viewModel: HomeViewModel = viewModel()
 ) {
+    viewModel: HomeViewModel = viewModel()
+) {
     val context = LocalContext.current
+
+    // StateFlow → Compose State，自动订阅更新
     val works by viewModel.works.collectAsState()
     val stats by viewModel.stats.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+
+    // 本地 UI 状态
     var showCreateDialog by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
 
+    // 初始化 ViewModel
     LaunchedEffect(userId) {
         viewModel.init(context, userId)
     }
@@ -119,14 +130,13 @@ fun HomeScreen(
         }
     }
 
-    // 创建作品对话框
+    // 创建作品对话框（使用 components/CreateWorkDialog.kt）
     if (showCreateDialog) {
         CreateWorkDialog(
             onDismiss = { showCreateDialog = false },
             onConfirm = { title, description, structureType ->
                 viewModel.createWork(title, description, structureType)
                 showCreateDialog = false
-                onNavigateToCreateWork()
             }
         )
     }
@@ -284,70 +294,6 @@ fun EmptyState(onCreateClick: () -> Unit) {
             Text("创建第一部作品")
         }
     }
-}
-
-@Composable
-fun CreateWorkDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, Work.StructureType) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var structureType by remember { mutableStateOf(Work.StructureType.VOLUMED) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("创建新作品") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("作品标题") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("作品简介（可选）") },
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("结构类型", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                Row(
-                    modifier = Modifier.padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = structureType == Work.StructureType.VOLUMED,
-                        onClick = { structureType = Work.StructureType.VOLUMED },
-                        label = { Text("分卷") }
-                    )
-                    FilterChip(
-                        selected = structureType == Work.StructureType.SINGLE,
-                        onClick = { structureType = Work.StructureType.SINGLE },
-                        label = { Text("整体") }
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(title, description, structureType) },
-                enabled = title.isNotBlank()
-            ) {
-                Text("创建")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 fun formatNumber(number: Long): String {
