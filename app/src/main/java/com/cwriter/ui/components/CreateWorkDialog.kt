@@ -34,7 +34,7 @@ fun CreateWorkDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var structureType by remember { mutableStateOf(Work.StructureType.SINGLE) } // 默认整体作品
+    var structureType by remember { mutableStateOf(Work.StructureType.VOLUMED) } // 默认分卷作品
 
     Dialog(
         onDismissRequest = onDismiss,
