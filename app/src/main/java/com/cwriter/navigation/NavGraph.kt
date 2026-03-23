@@ -17,33 +17,35 @@ fun CWriterNavGraph(
         navController = navController,
         startDestination = Screen.Home.route
     ) {
-        // 首页
+        // 首页（带底部导航的主屏幕，创建作品改为模态框，不再跳转页面）
         composable(Screen.Home.route) {
-            HomeScreen(
-                userId = userId,
-                onNavigateToCreateWork = {
-                    navController.navigate(Screen.CreateWork.route)
-                },
-                onNavigateToChapters = { workId ->
-                    navController.navigate(Screen.Chapters.createRoute(workId))
-                }
+            MainScreen(
+                navController = navController,
+                userId = userId
             )
         }
 
-        // 创建作品页
-        composable(Screen.CreateWork.route) {
-            CreateWorkScreen(
+        // 分卷作品管理页
+        composable(
+            route = Screen.VolumedWork.route,
+            arguments = listOf(
+                navArgument("workId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val workId = backStackEntry.arguments?.getString("workId") ?: ""
+            VolumedWorkScreen(
                 userId = userId,
+                workId = workId,
                 onNavigateBack = {
                     navController.popBackStack()
                 },
-                onWorkCreated = {
-                    navController.popBackStack()
+                onNavigateToEditor = { workId, chapterId, volumeId ->
+                    navController.navigate(Screen.ChapterEditor.createRoute(workId, chapterId))
                 }
             )
         }
 
-        // 章节列表页
+        // 章节列表页（旧版，保留兼容）
         composable(
             route = Screen.Chapters.route,
             arguments = listOf(
@@ -79,6 +81,12 @@ fun CWriterNavGraph(
                 chapterId = chapterId,
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onNavigateToChapter = { newChapterId ->
+                    // 替换当前页面（上一章/下一章导航）
+                    navController.navigate(Screen.ChapterEditor.createRoute(workId, newChapterId)) {
+                        popUpTo(Screen.ChapterEditor.createRoute(workId, chapterId)) { inclusive = true }
+                    }
                 }
             )
         }
