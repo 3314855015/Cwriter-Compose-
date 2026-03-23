@@ -1,0 +1,92 @@
+# ============ Android ============
+# 构建产物
+/build/
+/app/build/
+*/build/
+
+# Gradle 文件
+.gradle/
+local.properties
+
+# 签名相关（敏感信息，绝不能提交）
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# ============ IDE ============
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# VS Code
+.vscode/
+
+# ============ 操作系统 ============
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ============ 敏感信息 ============
+# 包含本地路径和密钥的文件
+local.properties
+secrets.properties
+api_keys.properties
+
+# 签名密钥
+*.jks
+*.keystore
+
+# ============ 其他 ============
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# 备份文件
+*.bak
+*.backup
+
+# 压缩包（通常不需要提交）
+*.zip
+*.rar
+*.7z
+*.tar.gz
+
+# NDK 构建产物
+obj/
+.cxx/
+
+# Kotlin 编译缓存
+*.kotlin_module
+
+# Lint 报告
+lint-report.html
+lint-results.xml
+
+# 测试覆盖率报告
+coverage/
+*.ec
