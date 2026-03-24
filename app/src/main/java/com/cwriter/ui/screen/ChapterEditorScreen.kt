@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material.icons.Icons
@@ -239,10 +241,13 @@ fun ChapterEditorScreen(
             }
         }
 
-        // ── FAB（蓝色，仅 B 状态）
+        // ── FAB（蓝色，仅 B 状态）— 悬浮在底栏上方
         AnimatedVisibility(
             visible  = editorState == EditorState.B,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 80.dp),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 20.dp, bottom = 96.dp), // 72dp ≈ 底栏高度
             enter    = scaleIn() + fadeIn(),
             exit     = scaleOut() + fadeOut()
         ) {
@@ -434,11 +439,9 @@ fun EditorContent(
             modifier   = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-        HorizontalDivider(color = textColor.copy(alpha = 0.15f), thickness = 0.8.dp)
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // 作品名·字数（A/B 状态居中，C 状态隐藏）
+        // 作品名·字数（A/B 状态居中，在分割线上方；C 状态隐藏）
         if (editorState != EditorState.C) {
             Text(
                 text      = "$workTitle · ${chapter?.wordCount ?: 0}字",
@@ -447,14 +450,20 @@ fun EditorContent(
                 textAlign = TextAlign.Center,
                 modifier  = Modifier.fillMaxWidth()
             )
-            Spacer(modifier = Modifier.height(16.dp))
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        HorizontalDivider(color = textColor.copy(alpha = 0.15f), thickness = 0.8.dp)
+        Spacer(modifier = Modifier.height(16.dp))
 
         // 内容
         if (editorState == EditorState.C) {
-            // 覆盖 MaterialTheme primary 为蓝色，消除系统橙色选择手柄
-            MaterialTheme(
-                colorScheme = MaterialTheme.colorScheme.copy(primary = Blue)
+            // 隐藏水滴手柄（handleColor=Transparent），保留蓝色选区背景
+            CompositionLocalProvider(
+                LocalTextSelectionColors provides TextSelectionColors(
+                    handleColor      = Color.Transparent,
+                    backgroundColor  = Blue.copy(alpha = 0.3f)
+                )
             ) {
                 BasicTextField(
                     value = tfv,
