@@ -11,7 +11,8 @@ sealed class Screen(val route: String) {
     object VolumedWork : Screen("volumed_work/{workId}") {
         fun createRoute(workId: String) = "volumed_work/$workId"
     }
-    object ChapterEditor : Screen("editor/{workId}/{chapterId}") {
-        fun createRoute(workId: String, chapterId: String) = "editor/$workId/$chapterId"
+    object ChapterEditor : Screen("editor/{workId}/{chapterId}/{volumeId}") {
+        fun createRoute(workId: String, chapterId: String, volumeId: String = "") =
+            "editor/$workId/$chapterId/${volumeId.ifEmpty { "_" }}"
     }
 }

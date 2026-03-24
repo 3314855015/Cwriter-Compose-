@@ -37,8 +37,8 @@ fun CWriterNavGraph(
                 userId = userId,
                 workId = workId,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToEditor = { wId, chapterId, _ ->
-                    navController.navigate(Screen.ChapterEditor.createRoute(wId, chapterId))
+                onNavigateToEditor = { wId, chapterId, volumeId ->
+                    navController.navigate(Screen.ChapterEditor.createRoute(wId, chapterId, volumeId))
                 }
             )
         }
@@ -62,19 +62,24 @@ fun CWriterNavGraph(
             route = Screen.ChapterEditor.route,
             arguments = listOf(
                 navArgument("workId") { type = NavType.StringType },
-                navArgument("chapterId") { type = NavType.StringType }
+                navArgument("chapterId") { type = NavType.StringType },
+                navArgument("volumeId") { type = NavType.StringType; defaultValue = "_" }
             )
         ) { backStackEntry ->
             val workId = backStackEntry.arguments?.getString("workId") ?: ""
             val chapterId = backStackEntry.arguments?.getString("chapterId") ?: ""
+            val volumeId = backStackEntry.arguments?.getString("volumeId")?.let {
+                if (it == "_") "" else it
+            } ?: ""
             ChapterEditorScreen(
                 userId = userId,
                 workId = workId,
                 chapterId = chapterId,
+                volumeId = volumeId,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToChapter = { newChapterId ->
-                    navController.navigate(Screen.ChapterEditor.createRoute(workId, newChapterId)) {
-                        popUpTo(Screen.ChapterEditor.createRoute(workId, chapterId)) { inclusive = true }
+                onNavigateToChapter = { newChapterId, newVolumeId ->
+                    navController.navigate(Screen.ChapterEditor.createRoute(workId, newChapterId, newVolumeId)) {
+                        popUpTo(Screen.ChapterEditor.createRoute(workId, chapterId, volumeId)) { inclusive = true }
                     }
                 }
             )
