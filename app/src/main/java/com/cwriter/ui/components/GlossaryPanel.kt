@@ -3,14 +3,16 @@ package com.cwriter.ui.components
 import android.content.Context
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,10 +22,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -189,6 +191,29 @@ class GlossaryViewModel : ViewModel() {
     fun deleteChildItem(item: GlossaryItem) {
         val list = _selectedItem.value?.children ?: currentGeneralChildren()
         list.removeAll { it.id == item.id }
+        save()
+        _childItems.value = list.toList()
+    }
+
+    // ── 拖拽排序 ─────────────────────────────────────────────────────────────
+
+    /** 父项拖拽排序：把 fromIndex 的项移到 toIndex */
+    fun reorderParent(fromIndex: Int, toIndex: Int) {
+        val list = currentParentList()
+        if (fromIndex == toIndex) return
+        if (fromIndex !in list.indices || toIndex !in list.indices) return
+        val item = list.removeAt(fromIndex)
+        list.add(toIndex, item)
+        save(); refreshLists()
+    }
+
+    /** 子项拖拽排序 */
+    fun reorderChild(fromIndex: Int, toIndex: Int) {
+        val list = _selectedItem.value?.children ?: currentGeneralChildren()
+        if (fromIndex == toIndex) return
+        if (fromIndex !in list.indices || toIndex !in list.indices) return
+        val item = list.removeAt(fromIndex)
+        list.add(toIndex, item)
         save()
         _childItems.value = list.toList()
     }
@@ -395,22 +420,27 @@ fun GlossaryPanel(
 
                     // 左栏：父项（1/3宽）
                     GlossaryParentColumn(
-                        modifier     = Modifier.weight(1f),
-                        selectedItem = selectedItem,
-                        items        = parentItems,
-                        isEditMode   = isEditMode,
-                        onAddClick   = {
+                        modifier       = Modifier.weight(1f),
+                        selectedItem   = selectedItem,
+                        items          = parentItems,
+                        isEditMode     = isEditMode,
+                        onAddClick     = {
                             isAddingParent = true
                             duplicateMessage = null
                             showAddDialog = true
                         },
-                        onItemClick  = { item ->
+                        onItemClick    = { item ->
                             if (isEditMode) deleteParentTarget = item
                             else viewModel.selectItem(item)
                         },
+                        onItemLongPress = { item ->
+                            // 查看模式：弹详情；编辑模式：拖拽（由行内处理，此处不触发）
+                            if (!isEditMode) detailItem = item
+                        },
                         onGeneralClick = {
                             if (!isEditMode) viewModel.selectItem(null)
-                        }
+                        },
+                        onReorder = { from, to -> viewModel.reorderParent(from, to) }
                     )
 
                     // 竖分隔线
@@ -438,7 +468,8 @@ fun GlossaryPanel(
                         onItemLongPress = { item ->
                             if (!isEditMode) detailItem = item
                         },
-                        onToggleEditMode = { viewModel.toggleEditMode() }
+                        onToggleEditMode = { viewModel.toggleEditMode() },
+                        onReorder = { from, to -> viewModel.reorderChild(from, to) }
                     )
                 }
             }
@@ -540,14 +571,12 @@ private fun GlossaryTypeSwitcher(
 /**
  * 父项列（左1/3）
  *
- * 布局讲解：
- *  - Column：新增栏（固定高度48dp）+ Divider + LazyColumn（剩余空间）
- *  - LazyColumn 比 Column+verticalScroll 更高效：只渲染可见项
- *  - "通用"是恒存在的特殊项，单独作为 item{} 放在列表最前面
- *
- * 编辑模式：
- *  - 点击任意项（含通用）→ 弹删除确认
- *  - 通用项不可删除（点击无效）
+ * 编辑模式行为：
+ *  - 短按 → 弹删除确认（通用不可删）
+ *  - 长按500ms → 拖拽排序（通用不可拖）
+ * 查看模式行为：
+ *  - 短按 → 切换选中
+ *  - 长按 → 弹详情（通用不弹）
  */
 @Composable
 private fun GlossaryParentColumn(
@@ -557,14 +586,20 @@ private fun GlossaryParentColumn(
     isEditMode: Boolean,
     onAddClick: () -> Unit,
     onItemClick: (GlossaryItem) -> Unit,
-    onGeneralClick: () -> Unit
+    onItemLongPress: (GlossaryItem) -> Unit,
+    onGeneralClick: () -> Unit,
+    onReorder: (from: Int, to: Int) -> Unit
 ) {
+    // 拖拽状态：draggingIndex = 正在拖的项在 items 中的索引，dragOffsetY = 拖拽偏移px
+    var draggingIndex by remember { mutableStateOf(-1) }
+    var dragOffsetY   by remember { mutableStateOf(0f) }
+    val itemHeightPx  = with(LocalDensity.current) { 48.dp.toPx() }
+
     Column(modifier = modifier.fillMaxHeight()) {
         // 新增栏
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
+                .fillMaxWidth().height(48.dp)
                 .background(Color(0xFF252525))
                 .pointerInput(Unit) { detectTapGestures(onTap = { onAddClick() }) }
                 .padding(horizontal = 12.dp),
@@ -574,25 +609,55 @@ private fun GlossaryParentColumn(
             Spacer(Modifier.width(6.dp))
             Text("新增", color = Color(0xFF007AFF), fontSize = 13.sp)
         }
-
         HorizontalDivider(thickness = 1.dp, color = Color(0xFF333333))
 
         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            // "通用"恒有项
+            // "通用"恒有项 — 不支持拖拽，查看模式不弹详情
             item {
                 GlossaryParentRow(
-                    name       = "通用",
-                    isSelected = selectedItem == null,
-                    isEditMode = isEditMode,
-                    onClick    = { onGeneralClick() }
+                    name        = "通用",
+                    isSelected  = selectedItem == null,
+                    isEditMode  = isEditMode,
+                    isDragging  = false,
+                    dragOffsetY = 0f,
+                    onClick     = { onGeneralClick() },
+                    onLongPress = { /* 通用不弹详情，不拖拽 */ }
                 )
             }
-            items(items, key = { it.id }) { item ->
+            // 用户创建的父项，支持拖拽（编辑模式）和长按详情（查看模式）
+            itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                 GlossaryParentRow(
-                    name       = item.name,
-                    isSelected = item.id == selectedItem?.id,
-                    isEditMode = isEditMode,
-                    onClick    = { onItemClick(item) }
+                    name        = item.name,
+                    isSelected  = item.id == selectedItem?.id,
+                    isEditMode  = isEditMode,
+                    isDragging  = draggingIndex == index,
+                    dragOffsetY = if (draggingIndex == index) dragOffsetY else 0f,
+                    onClick     = { onItemClick(item) },
+                    onLongPress = {
+                        if (isEditMode) {
+                            // 编辑模式长按 → 开始拖拽（由 pointerInput 内部处理，此处仅标记）
+                        } else {
+                            onItemLongPress(item)
+                        }
+                    },
+                    onDragStart = if (isEditMode) { offsetY ->
+                        draggingIndex = index
+                        dragOffsetY = offsetY
+                    } else null,
+                    onDragMove = if (isEditMode) { offsetY ->
+                        dragOffsetY = offsetY
+                    } else null,
+                    onDragEnd = if (isEditMode) {
+                        {
+                            if (draggingIndex >= 0) {
+                                val steps = (dragOffsetY / itemHeightPx).toInt()
+                                val target = (draggingIndex + steps).coerceIn(0, items.size - 1)
+                                if (target != draggingIndex) onReorder(draggingIndex, target)
+                            }
+                            draggingIndex = -1
+                            dragOffsetY = 0f
+                        }
+                    } else null
                 )
             }
             if (items.isEmpty()) {
@@ -600,35 +665,100 @@ private fun GlossaryParentColumn(
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         contentAlignment = Alignment.Center
-                    ) {
-                        Text("点击上方新增", color = Color(0xFF666666), fontSize = 11.sp)
-                    }
+                    ) { Text("点击上方新增", color = Color(0xFF666666), fontSize = 11.sp) }
                 }
             }
         }
     }
 }
 
+/**
+ * 父项行
+ *
+ * 手势逻辑（用 awaitPointerEventScope 精确控制）：
+ *  - 按下后等待：< 500ms 抬起 → 短按（onClick）
+ *  - 按下后等待：≥ 500ms 未抬起 → 长按（onLongPress 或开始拖拽）
+ *  - 拖拽中移动 → onDragMove(累计偏移Y)
+ *  - 拖拽中抬起 → onDragEnd()
+ *
+ * 为什么用 awaitPointerEventScope 而不是 detectTapGestures？
+ *  detectTapGestures 的 onLongPress 触发后无法继续追踪移动，
+ *  awaitPointerEventScope 可以在长按后继续消费 MOVE 事件实现拖拽。
+ */
 @Composable
 private fun GlossaryParentRow(
     name: String,
     isSelected: Boolean,
     isEditMode: Boolean,
-    onClick: () -> Unit
+    isDragging: Boolean,
+    dragOffsetY: Float,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    onDragStart: ((Float) -> Unit)? = null,
+    onDragMove: ((Float) -> Unit)? = null,
+    onDragEnd: (() -> Unit)? = null
 ) {
+    val density = LocalDensity.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isSelected && !isEditMode) Color(0xFF007AFF).copy(alpha = 0.2f) else Color.Transparent)
-            .pointerInput(isEditMode) { detectTapGestures(onTap = { onClick() }) }
+            .offset(y = with(density) { dragOffsetY.toDp() })
+            .background(
+                when {
+                    isDragging -> Color(0xFF007AFF).copy(alpha = 0.15f)
+                    isSelected && !isEditMode -> Color(0xFF007AFF).copy(alpha = 0.2f)
+                    else -> Color.Transparent
+                }
+            )
+            .pointerInput(isEditMode) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var longPressed = false
+                        var totalOffsetY = 0f
+                        val startTime = System.currentTimeMillis()
+
+                        // 等待 500ms 或手指抬起
+                        var event = awaitPointerEvent()
+                        while (event.changes.any { it.pressed }) {
+                            val elapsed = System.currentTimeMillis() - startTime
+                            val change = event.changes.firstOrNull() ?: break
+
+                            if (!longPressed && elapsed >= 500L) {
+                                longPressed = true
+                                if (onDragStart != null) {
+                                    onDragStart(totalOffsetY)
+                                } else {
+                                    onLongPress()
+                                }
+                            }
+
+                            if (longPressed && onDragMove != null) {
+                                totalOffsetY += change.positionChange().y
+                                onDragMove(totalOffsetY)
+                                change.consume()
+                            }
+
+                            event = awaitPointerEvent()
+                        }
+
+                        if (longPressed) {
+                            onDragEnd?.invoke()
+                        } else {
+                            // 短按
+                            val elapsed = System.currentTimeMillis() - startTime
+                            if (elapsed < 500L) onClick()
+                        }
+                    }
+                }
+            }
             .padding(horizontal = 12.dp, vertical = 14.dp)
     ) {
         Text(
             text     = name,
             color    = when {
-                isEditMode -> Color(0xFFFF3B30).copy(alpha = 0.8f)
-                isSelected -> Color(0xFF007AFF)
-                else       -> Color(0xFFE0E0E0)
+                isSelected && !isEditMode -> Color(0xFF007AFF)
+                else -> Color(0xFFE0E0E0)
             },
             fontSize = 13.sp,
             maxLines = 1,
@@ -640,13 +770,7 @@ private fun GlossaryParentRow(
 /**
  * 子项列（右2/3）
  *
- * 布局讲解：
- *  - Box 包裹 Column + FAB，FAB 用 align(BottomEnd) 绝对定位在右下角
- *  - FAB 切换编辑/查看模式，图标用 Edit（编辑模式时显示"完成"图标）
- *
- * 编辑模式：
- *  - 点击子项 → 弹删除确认
- *  - 长按子项 → 无效（长按只在查看模式下显示详情）
+ * FAB 图标：查看模式 = Edit 图标，编辑模式 = Check 图标（表示"完成编辑"）
  */
 @Composable
 private fun GlossaryChildColumn(
@@ -656,15 +780,19 @@ private fun GlossaryChildColumn(
     onAddClick: () -> Unit,
     onItemClick: (GlossaryItem) -> Unit,
     onItemLongPress: (GlossaryItem) -> Unit,
-    onToggleEditMode: () -> Unit
+    onToggleEditMode: () -> Unit,
+    onReorder: (from: Int, to: Int) -> Unit
 ) {
+    var draggingIndex by remember { mutableStateOf(-1) }
+    var dragOffsetY   by remember { mutableStateOf(0f) }
+    val itemHeightPx  = with(LocalDensity.current) { 48.dp.toPx() }
+
     Box(modifier = modifier.fillMaxHeight()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 新增子项栏
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
+                    .fillMaxWidth().height(48.dp)
                     .background(Color(0xFF252525))
                     .pointerInput(Unit) { detectTapGestures(onTap = { onAddClick() }) }
                     .padding(horizontal = 12.dp),
@@ -674,16 +802,33 @@ private fun GlossaryChildColumn(
                 Spacer(Modifier.width(6.dp))
                 Text("新增子项", color = Color(0xFF007AFF), fontSize = 13.sp)
             }
-
             HorizontalDivider(thickness = 1.dp, color = Color(0xFF333333))
 
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                items(items, key = { it.id }) { item ->
+                itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                     GlossaryChildRow(
                         name        = item.name,
                         isEditMode  = isEditMode,
+                        isDragging  = draggingIndex == index,
+                        dragOffsetY = if (draggingIndex == index) dragOffsetY else 0f,
                         onClick     = { onItemClick(item) },
-                        onLongPress = { onItemLongPress(item) }
+                        onLongPress = { onItemLongPress(item) },
+                        onDragStart = if (isEditMode) { offsetY ->
+                            draggingIndex = index; dragOffsetY = offsetY
+                        } else null,
+                        onDragMove = if (isEditMode) { offsetY ->
+                            dragOffsetY = offsetY
+                        } else null,
+                        onDragEnd = if (isEditMode) {
+                            {
+                                if (draggingIndex >= 0) {
+                                    val steps = (dragOffsetY / itemHeightPx).toInt()
+                                    val target = (draggingIndex + steps).coerceIn(0, items.size - 1)
+                                    if (target != draggingIndex) onReorder(draggingIndex, target)
+                                }
+                                draggingIndex = -1; dragOffsetY = 0f
+                            }
+                        } else null
                     )
                 }
                 if (items.isEmpty()) {
@@ -691,16 +836,13 @@ private fun GlossaryChildColumn(
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(24.dp),
                             contentAlignment = Alignment.Center
-                        ) {
-                            Text("暂无子项，点击上方新增", color = Color(0xFF666666), fontSize = 11.sp)
-                        }
+                        ) { Text("暂无子项，点击上方新增", color = Color(0xFF666666), fontSize = 11.sp) }
                     }
                 }
             }
         }
 
-        // FAB：切换编辑/查看模式（右下角）
-        // 对应 UniApp 的 .fab-button，用 viewa.png / edit.png 切换图标
+        // FAB：查看模式显示 Edit 图标，编辑模式显示 Check 图标
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -712,7 +854,7 @@ private fun GlossaryChildColumn(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector        = Icons.Default.Edit,
+                imageVector        = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
                 contentDescription = if (isEditMode) "完成" else "编辑",
                 tint               = Color.White,
                 modifier           = Modifier.size(20.dp)
@@ -721,27 +863,74 @@ private fun GlossaryChildColumn(
     }
 }
 
+/**
+ * 子项行 — 与父项行相同的手势逻辑
+ * 查看模式：短按插入，长按详情
+ * 编辑模式：短按删除确认，长按500ms拖拽
+ */
 @Composable
 private fun GlossaryChildRow(
     name: String,
     isEditMode: Boolean,
+    isDragging: Boolean,
+    dragOffsetY: Float,
     onClick: () -> Unit,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    onDragStart: ((Float) -> Unit)? = null,
+    onDragMove: ((Float) -> Unit)? = null,
+    onDragEnd: (() -> Unit)? = null
 ) {
+    val density = LocalDensity.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .offset(y = with(density) { dragOffsetY.toDp() })
+            .background(if (isDragging) Color(0xFF007AFF).copy(alpha = 0.15f) else Color.Transparent)
             .pointerInput(isEditMode) {
-                detectTapGestures(
-                    onTap       = { onClick() },
-                    onLongPress = { if (!isEditMode) onLongPress() }
-                )
+                awaitPointerEventScope {
+                    while (true) {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var longPressed = false
+                        var totalOffsetY = 0f
+                        val startTime = System.currentTimeMillis()
+
+                        var event = awaitPointerEvent()
+                        while (event.changes.any { it.pressed }) {
+                            val elapsed = System.currentTimeMillis() - startTime
+                            val change = event.changes.firstOrNull() ?: break
+
+                            if (!longPressed && elapsed >= 500L) {
+                                longPressed = true
+                                if (isEditMode && onDragStart != null) {
+                                    onDragStart(totalOffsetY)
+                                } else {
+                                    onLongPress()
+                                }
+                            }
+
+                            if (longPressed && isEditMode && onDragMove != null) {
+                                totalOffsetY += change.positionChange().y
+                                onDragMove(totalOffsetY)
+                                change.consume()
+                            }
+
+                            event = awaitPointerEvent()
+                        }
+
+                        if (longPressed) {
+                            onDragEnd?.invoke()
+                        } else {
+                            val elapsed = System.currentTimeMillis() - startTime
+                            if (elapsed < 500L) onClick()
+                        }
+                    }
+                }
             }
             .padding(horizontal = 12.dp, vertical = 14.dp)
     ) {
         Text(
             text     = name,
-            color    = if (isEditMode) Color(0xFFFF3B30).copy(alpha = 0.8f) else Color(0xFFE0E0E0),
+            color    = Color(0xFFE0E0E0),
             fontSize = 13.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

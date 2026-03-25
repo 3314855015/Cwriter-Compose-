@@ -190,18 +190,20 @@ fun ChapterEditorScreen(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 } else {
                     EditorContent(
-                        chapter        = chapter,
-                        workTitle      = work?.title ?: "",
-                        editorState    = editorState,
-                        focusRequester = focusRequester,
-                        fontSize       = fontSize,
-                        lineHeight     = lineHeight,
-                        textColor      = contentTextColor,
-                        scrollState    = scrollState,
-                        keyboardHeight = keyboardHeight,
-                        screenHeightPx = screenHeightPx,
-                        density        = density,
-                        onContentChange = { viewModel.updateContent(it) }
+                        chapter           = chapter,
+                        workTitle         = work?.title ?: "",
+                        editorState       = editorState,
+                        focusRequester    = focusRequester,
+                        fontSize          = fontSize,
+                        lineHeight        = lineHeight,
+                        textColor         = contentTextColor,
+                        scrollState       = scrollState,
+                        keyboardHeight    = keyboardHeight,
+                        screenHeightPx    = screenHeightPx,
+                        density           = density,
+                        pendingInsertText = viewModel.pendingInsertText.collectAsState().value,
+                        onInsertConsumed  = { viewModel.clearPendingInsert() },
+                        onContentChange   = { viewModel.updateContent(it) }
                     )
                 }
             }
@@ -287,8 +289,9 @@ fun ChapterEditorScreen(
         NestedListPanel(isVisible = showNestedListPanel, onDismiss = { viewModel.toggleNestedListPanel() })
         GlossaryPanel(
             isVisible    = showGlossaryPanel,
+            workId       = workId,
             onDismiss    = { viewModel.toggleGlossaryPanel() },
-            onInsertText = { text -> viewModel.updateContent((chapter?.content ?: "") + text) }
+            onInsertText = { text -> viewModel.requestInsertText(text) }
         )
         if (showForeshadowingPanel) {
             ForeshadowingBottomSheet(
@@ -394,6 +397,8 @@ fun EditorContent(
     keyboardHeight: Dp,
     screenHeightPx: Int,
     density: androidx.compose.ui.unit.Density,
+    pendingInsertText: String?,
+    onInsertConsumed: () -> Unit,
     onContentChange: (String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -415,6 +420,20 @@ fun EditorContent(
             tfv = TextFieldValue(externalContent,
                 selection = androidx.compose.ui.text.TextRange(externalContent.length))
         }
+    }
+
+    // 词库插入：在当前光标位置插入文字
+    // 对应 UniApp 的 handleInsertText：before + text + after，光标移到插入点之后
+    LaunchedEffect(pendingInsertText) {
+        val insertText = pendingInsertText ?: return@LaunchedEffect
+        val cursor = tfv.selection.end.coerceIn(0, tfv.text.length)
+        val before = tfv.text.substring(0, cursor)
+        val after  = tfv.text.substring(cursor)
+        val newText = before + insertText + after
+        val newCursor = cursor + insertText.length
+        tfv = TextFieldValue(newText, selection = androidx.compose.ui.text.TextRange(newCursor))
+        onContentChange(newText)
+        onInsertConsumed()
     }
 
     val bottomPadding = if (editorState == EditorState.C)

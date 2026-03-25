@@ -48,6 +48,13 @@ class ChapterEditorViewModel : ViewModel() {
     private val _fontSize = MutableStateFlow(16f)
     val fontSize: StateFlow<Float> = _fontSize.asStateFlow()
 
+    // 词库插入：非 null 时 EditorContent 在光标位置插入文字后清空
+    private val _pendingInsertText = MutableStateFlow<String?>(null)
+    val pendingInsertText: StateFlow<String?> = _pendingInsertText.asStateFlow()
+
+    fun requestInsertText(text: String) { _pendingInsertText.value = text }
+    fun clearPendingInsert() { _pendingInsertText.value = null }
+
     private val _lineHeight = MutableStateFlow(1.8f)
     val lineHeight: StateFlow<Float> = _lineHeight.asStateFlow()
 
