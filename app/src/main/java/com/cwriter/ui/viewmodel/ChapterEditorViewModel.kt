@@ -143,6 +143,7 @@ class ChapterEditorViewModel : ViewModel() {
     fun exitEditMode() {
         saveChapter()
         _editorState.value = EditorState.B
+        closeAllPanels()
     }
 
     fun updateContent(newContent: String) {
