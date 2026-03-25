@@ -422,13 +422,17 @@ class VolumedWorkViewModel : ViewModel() {
 
     /**
      * 判断某章节是否是全局最后一章（用于显示"写作中"标签）
-     * 全局最后一章 = 最后一个卷（正序）的最后一章
+     * 全局最后一章 = 最后一个【有章节】的卷的最后一章（忽略空卷）
      */
     fun isLastChapterGlobally(volumeId: String, chapterId: String): Boolean {
         val sortedVolumes = volumes.value.sortedBy { it.order }
         if (sortedVolumes.isEmpty()) return false
-        val lastVolume = sortedVolumes.last()
-        if (lastVolume.id != volumeId) return false
+        // 找最后一个有章节的卷（忽略空卷）
+        val lastNonEmptyVolume = sortedVolumes.lastOrNull { vol ->
+            val chapters = chaptersByVolume.value[vol.id]
+            !chapters.isNullOrEmpty()
+        } ?: return false
+        if (lastNonEmptyVolume.id != volumeId) return false
         val chapters = chaptersByVolume.value[volumeId] ?: return false
         if (chapters.isEmpty()) return false
         return chapters.last().id == chapterId
