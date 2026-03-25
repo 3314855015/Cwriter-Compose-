@@ -94,6 +94,7 @@ fun ChapterEditorScreen(
     val foreshadowings         by viewModel.foreshadowings.collectAsState()
     val selectedParagraphIndex by viewModel.selectedParagraphIndex.collectAsState()
     val showForeshadowingSheet by viewModel.showForeshadowingSheet.collectAsState()
+    val allChapterPairs        by viewModel.allChapterPairsFlow.collectAsState()
 
     var keyboardHeight by remember { mutableStateOf(0.dp) }
     var screenHeightPx by remember { mutableStateOf(0) }
@@ -317,6 +318,7 @@ fun ChapterEditorScreen(
                 paragraphIndex         = selectedParagraphIndex,
                 currentChapterId       = chapterId,
                 foreshadowings         = foreshadowings,
+                allChapterPairs        = allChapterPairs,
                 onDismiss              = { viewModel.closeForeshadowingSheet() },
                 onCreateForeshadowing  = { content -> viewModel.createForeshadowing(selectedParagraphIndex, content) },
                 onRecycleForeshadowing = { id -> viewModel.recycleForeshadowing(id) },
@@ -590,7 +592,7 @@ fun EditorContent(
                 }
             } else {
                 // A/B 状态：分段显示，每段测量位置供伏笔图标定位
-                // showForeshadowingOverlay 开启时右侧留 14dp 给图标列（12dp图标 + 2dp间距）
+                // showForeshadowingOverlay 开启时右侧留 28dp 给图标列（24dp图标 + 4dp间距）
                 val showForeshadowing = (editorState == EditorState.A || editorState == EditorState.B) && showForeshadowingOverlay
                 // 段落间距 = lineHeight * fontSize / 2（模拟行距视觉效果）
                 val paraSpacingDp = with(density) { (fontSize * (lineHeight - 1f) / 2f).sp.toDp() }
@@ -598,7 +600,7 @@ fun EditorContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(end = if (showForeshadowing) 14.dp else 0.dp)
+                        .padding(end = if (showForeshadowing) 12.dp else 0.dp)
                 ) {
                     if (paragraphs.isEmpty()) {
                         Text("暂无内容...", style = textStyle.copy(color = textColor.copy(alpha = 0.4f)))
@@ -637,7 +639,7 @@ fun EditorContent(
                         currentChapterId = chapter?.id ?: "",
                         isClickable      = true,
                         onIconClick      = onParagraphIconClick,
-                        modifier         = Modifier.align(Alignment.TopEnd).width(12.dp)
+                        modifier         = Modifier.align(Alignment.TopEnd).width(24.dp)
                     )
                 }
             }
