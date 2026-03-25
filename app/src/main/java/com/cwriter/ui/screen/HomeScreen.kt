@@ -249,7 +249,7 @@ private fun StatsRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(statsBg)
+            .background(divider)
     ) {
         HorizontalDivider(color = divider, thickness = 0.5.dp)
         Row(
@@ -291,7 +291,7 @@ private fun TabBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(cardBg)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         tabs.forEachIndexed { index, title ->
