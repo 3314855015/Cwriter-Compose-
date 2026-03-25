@@ -50,14 +50,16 @@ fun ForeshadowingOverlayPanel(
     val foreshadowingMap = remember(foreshadowings, paragraphBounds.size, currentChapterId) {
         val map = mutableMapOf<Int, ParagraphForeshadowing>()
         paragraphBounds.keys.forEach { index ->
-            // 筛选在该段落创建的伏笔
-            val createdHere = foreshadowings.filter { it.createdParagraphIndex == index }
-            
-            // 筛选在该段落回收的伏笔（同一章节）
-            val recycledHere = foreshadowings.filter { 
+            // 筛选在当前章节该段落创建的伏笔
+            val createdHere = foreshadowings.filter {
+                it.createdParagraphIndex == index && it.chapterId == currentChapterId
+            }
+
+            // 筛选在当前章节该段落回收的伏笔（不论创建位置）
+            val recycledHere = foreshadowings.filter {
                 it.status == ForeshadowingStatus.RECYCLED &&
                 it.recycledChapterId == currentChapterId &&
-                it.recycledParagraphIndex == index 
+                it.recycledParagraphIndex == index
             }
             
             map[index] = ParagraphForeshadowing(
@@ -71,8 +73,8 @@ fun ForeshadowingOverlayPanel(
         map
     }
     
-    // 图标列：宽度 = 12dp（对应 UniApp 的 16px），绝对定位
-    Box(modifier = modifier.width(16.dp)) {
+    // 图标列：绝对定位，宽度由内容决定
+    Box(modifier = modifier) {
         // 为每个段落绝对定位图标，位置 = 段落中心Y（对应 UniApp 的 bounds.centerY）
         paragraphBounds.values.sortedBy { it.index }.forEach { bounds ->
             val foreshadowing = foreshadowingMap[bounds.index]
@@ -80,7 +82,7 @@ fun ForeshadowingOverlayPanel(
 
             Box(
                 modifier = Modifier
-                    .offset(y = centerYDp - 6.dp)  // -6dp 使图标垂直居中（图标高12dp的一半）
+                    .offset(y = centerYDp - 12.dp)  // -12dp 使图标垂直居中（图标高24dp的一半）
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
@@ -150,7 +152,7 @@ private fun ForeshadowingIcon(
 
     Box(
         modifier = Modifier
-            .size(16.dp)
+            .size(24.dp)
             .clip(CircleShape)
             .background(backgroundColor)
             .then(
@@ -161,7 +163,7 @@ private fun ForeshadowingIcon(
     ) {
         Text(
             text       = number?.toString() ?: "+",
-            fontSize   = 8.sp,
+            fontSize   = 12.sp,
             fontWeight = FontWeight.Bold,
             color      = textColor
         )

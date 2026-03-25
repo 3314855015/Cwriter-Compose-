@@ -45,6 +45,7 @@ fun ForeshadowingBottomSheet(
     paragraphIndex: Int,
     currentChapterId: String,
     foreshadowings: List<Foreshadowing>,
+    allChapterPairs: List<Pair<String, String>> = emptyList(),
     onDismiss: () -> Unit,
     onCreateForeshadowing: (String) -> Unit,
     onRecycleForeshadowing: (String) -> Unit,
@@ -102,7 +103,9 @@ fun ForeshadowingBottomSheet(
                 when (selectedTab) {
                     BottomSheetTab.CREATE -> CreateForeshadowingTab(
                         paragraphIndex = paragraphIndex,
+                        currentChapterId = currentChapterId,
                         foreshadowings = foreshadowings,
+                        allChapterPairs = allChapterPairs,
                         onCreate = onCreateForeshadowing,
                         surfaceColor = darkSurface,
                         textColor = darkOnSurface,
@@ -112,6 +115,7 @@ fun ForeshadowingBottomSheet(
                         paragraphIndex = paragraphIndex,
                         currentChapterId = currentChapterId,
                         foreshadowings = foreshadowings,
+                        allChapterPairs = allChapterPairs,
                         onRecycle = onRecycleForeshadowing,
                         onUnrecycle = onUnrecycleForeshadowing,
                         surfaceColor = darkSurface,
@@ -227,12 +231,14 @@ private fun TabButton(
 
 /**
  * 创建伏笔标签页
- * 显示在当前段落创建的所有伏笔（包括已回收的）
+ * 显示在当前章节当前段落创建的所有伏笔（包括已回收的）
  */
 @Composable
 private fun CreateForeshadowingTab(
     paragraphIndex: Int,
+    currentChapterId: String,
     foreshadowings: List<Foreshadowing>,
+    allChapterPairs: List<Pair<String, String>> = emptyList(),
     onCreate: (String) -> Unit,
     surfaceColor: Color,
     textColor: Color,
@@ -240,9 +246,11 @@ private fun CreateForeshadowingTab(
 ) {
     var inputText by remember { mutableStateOf("") }
     
-    // 筛选在当前段落创建的伏笔
-    val createdHere = remember(foreshadowings, paragraphIndex) {
-        foreshadowings.filter { it.createdParagraphIndex == paragraphIndex }
+    // 筛选在当前章节当前段落创建的伏笔
+    val createdHere = remember(foreshadowings, paragraphIndex, currentChapterId) {
+        foreshadowings.filter {
+            it.createdParagraphIndex == paragraphIndex && it.chapterId == currentChapterId
+        }
     }
 
     Column(
@@ -263,7 +271,8 @@ private fun CreateForeshadowingTab(
                         isRecycled = foreshadowing.status == ForeshadowingStatus.RECYCLED,
                         surfaceColor = surfaceColor,
                         textColor = textColor,
-                        accentColor = accentColor
+                        accentColor = accentColor,
+                        allChapterPairs = allChapterPairs
                     )
                 }
             }
@@ -309,8 +318,16 @@ private fun ForeshadowingCard(
     surfaceColor: Color,
     textColor: Color,
     accentColor: Color,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    allChapterPairs: List<Pair<String, String>> = emptyList()
 ) {
+    // 获取章节序号（用于显示"第X章"）
+    fun getChapterLabel(chapterId: String?): String {
+        if (chapterId == null) return ""
+        val idx = allChapterPairs.indexOfFirst { it.first == chapterId }
+        return if (idx >= 0) "第${idx + 1}章" else ""
+    }
+
     val cardModifier = if (onLongClick != null) {
         Modifier
             .fillMaxWidth()
@@ -360,6 +377,14 @@ private fun ForeshadowingCard(
                             fontSize = 10.sp,
                             color = accentColor
                         )
+                        val recycledLabel = getChapterLabel(foreshadowing.recycledChapterId)
+                        if (recycledLabel.isNotEmpty()) {
+                            Text(
+                                text = " · $recycledLabel",
+                                fontSize = 10.sp,
+                                color = textColor.copy(alpha = 0.5f)
+                            )
+                        }
                         if (foreshadowing.recycledParagraphIndex != null) {
                             Text(
                                 text = " · 第${foreshadowing.recycledParagraphIndex + 1}段",
@@ -446,6 +471,7 @@ private fun RecycleForeshadowingTab(
     paragraphIndex: Int,
     currentChapterId: String,
     foreshadowings: List<Foreshadowing>,
+    allChapterPairs: List<Pair<String, String>> = emptyList(),
     onRecycle: (String) -> Unit,
     onUnrecycle: (String) -> Unit,
     surfaceColor: Color,
@@ -465,9 +491,12 @@ private fun RecycleForeshadowingTab(
         }
     }
     
-    // 所有待回收的伏笔（跨章节）
-    val pendingForeshadowings = remember(foreshadowings) {
-        foreshadowings.filter { it.status == ForeshadowingStatus.PENDING }
+    // 所有待回收的伏笔（跨章节），排除同章节同段落创建的伏笔（不能自己回收自己）
+    val pendingForeshadowings = remember(foreshadowings, currentChapterId, paragraphIndex) {
+        foreshadowings.filter {
+            it.status == ForeshadowingStatus.PENDING &&
+            !(it.chapterId == currentChapterId && it.createdParagraphIndex == paragraphIndex)
+        }
     }
 
     Column(
@@ -495,7 +524,8 @@ private fun RecycleForeshadowingTab(
                         surfaceColor = surfaceColor,
                         textColor = textColor,
                         accentColor = accentColor,
-                        onLongClick = { showUnrecycleDialog = foreshadowing.id }
+                        onLongClick = { showUnrecycleDialog = foreshadowing.id },
+                        allChapterPairs = allChapterPairs
                     )
                 }
             }
@@ -526,6 +556,7 @@ private fun RecycleForeshadowingTab(
                         surfaceColor = surfaceColor,
                         textColor = textColor,
                         accentColor = accentColor,
+                        allChapterPairs = allChapterPairs,
                         onLongClick = {
                             selectedIds = if (isSelected) {
                                 selectedIds - foreshadowing.id
@@ -628,8 +659,14 @@ private fun SelectableForeshadowingCard(
     surfaceColor: Color,
     textColor: Color,
     accentColor: Color,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    allChapterPairs: List<Pair<String, String>> = emptyList()
 ) {
+    // 获取章节序号
+    fun getChapterLabel(chapterId: String): String {
+        val idx = allChapterPairs.indexOfFirst { it.first == chapterId }
+        return if (idx >= 0) "第${idx + 1}章" else ""
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -668,7 +705,7 @@ private fun SelectableForeshadowingCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "第 ${foreshadowing.createdParagraphIndex + 1} 段 · ${foreshadowing.getFormattedTime()}",
+                    text = "${getChapterLabel(foreshadowing.chapterId)} · 第 ${foreshadowing.createdParagraphIndex + 1} 段 · ${foreshadowing.getFormattedTime()}",
                     fontSize = 11.sp,
                     color = textColor.copy(alpha = 0.5f)
                 )

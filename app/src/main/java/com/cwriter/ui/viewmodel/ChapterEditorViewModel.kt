@@ -31,6 +31,9 @@ class ChapterEditorViewModel : ViewModel() {
     // 章节导航用：所有章节的 (chapterId, volumeId) 对
     private var allChapterPairs: List<Pair<String, String>> = emptyList()
 
+    private val _allChapterPairs = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val allChapterPairsFlow: StateFlow<List<Pair<String, String>>> = _allChapterPairs.asStateFlow()
+
     private val _work = MutableStateFlow<Work?>(null)
     val work: StateFlow<Work?> = _work.asStateFlow()
 
@@ -127,6 +130,7 @@ class ChapterEditorViewModel : ViewModel() {
                     val chapters = repository?.getChapters(userId, workId) ?: emptyList()
                     allChapterPairs = chapters.map { it.id to "" }
                 }
+                _allChapterPairs.value = allChapterPairs
                 val idx = allChapterPairs.indexOfFirst { it.first == chapterId }
                 _hasPrevChapter.value = idx > 0
                 _hasNextChapter.value = idx < allChapterPairs.size - 1
