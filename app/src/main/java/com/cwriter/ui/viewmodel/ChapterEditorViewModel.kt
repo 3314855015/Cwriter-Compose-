@@ -4,18 +4,25 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cwriter.data.model.Chapter
+import com.cwriter.data.model.Foreshadowing
+import com.cwriter.data.model.ForeshadowingStatus
 import com.cwriter.data.model.Work
 import com.cwriter.data.repository.FileStorageRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 enum class EditorState { A, B, C }
 enum class ReadMode { SCROLL, PAGE }
 
 class ChapterEditorViewModel : ViewModel() {
     private var repository: FileStorageRepository? = null
+    private var context: Context? = null
     private var userId: String = "default_user"
     private var workId: String = ""
     private var chapterId: String = ""
@@ -84,11 +91,13 @@ class ChapterEditorViewModel : ViewModel() {
 
     fun init(context: Context, uid: String, wid: String, cid: String, vid: String = "") {
         repository = FileStorageRepository(context)
+        this.context = context
         userId = uid
         workId = wid
         chapterId = cid
         volumeId = vid
         loadData()
+        loadForeshadowings()
     }
 
     private fun loadData() {
@@ -155,6 +164,11 @@ class ChapterEditorViewModel : ViewModel() {
             content = newContent,
             wordCount = newContent.filter { !it.isWhitespace() }.length
         )
+    }
+
+    fun updateTitle(newTitle: String) {
+        val current = _chapter.value ?: return
+        _chapter.value = current.copy(title = newTitle)
     }
 
     fun undo() {
@@ -227,8 +241,128 @@ class ChapterEditorViewModel : ViewModel() {
     }
 
     fun toggleForeshadowingPanel() {
+        if (_editorState.value == EditorState.C) {
+            showSnackbar("请在阅读模式下使用伏笔功能")
+            return
+        }
         _showForeshadowingPanel.value = !_showForeshadowingPanel.value
     }
+
+    // 伏笔底部弹窗（点击图标时打开）
+    private val _showForeshadowingSheet = MutableStateFlow(false)
+    val showForeshadowingSheet: StateFlow<Boolean> = _showForeshadowingSheet.asStateFlow()
+
+    // ── 伏笔数据 ─────────────────────────────────────────────────────────────
+
+    private val _foreshadowings = MutableStateFlow<List<Foreshadowing>>(emptyList())
+    val foreshadowings: StateFlow<List<Foreshadowing>> = _foreshadowings.asStateFlow()
+
+    // 当前点击的段落索引（用于打开 BottomSheet）
+    private val _selectedParagraphIndex = MutableStateFlow(0)
+    val selectedParagraphIndex: StateFlow<Int> = _selectedParagraphIndex.asStateFlow()
+
+    fun openForeshadowingSheet(paragraphIndex: Int) {
+        _selectedParagraphIndex.value = paragraphIndex
+        _showForeshadowingSheet.value = true
+    }
+
+    fun closeForeshadowingSheet() {
+        _showForeshadowingSheet.value = false
+    }
+
+    private fun loadForeshadowings() {
+        val ctx = context ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val key = "foreshadowing_$workId"
+            val str = ctx.getSharedPreferences("cwriter_foreshadowing", Context.MODE_PRIVATE)
+                .getString(key, null)
+            val list = if (str != null) {
+                try { jsonToForeshadowings(JSONArray(str)) } catch (e: Exception) { emptyList() }
+            } else emptyList()
+            withContext(Dispatchers.Main) { _foreshadowings.value = list }
+        }
+    }
+
+    private fun saveForeshadowings() {
+        val ctx = context ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val arr = foreshadowingsToJson(_foreshadowings.value)
+            ctx.getSharedPreferences("cwriter_foreshadowing", Context.MODE_PRIVATE)
+                .edit().putString("foreshadowing_$workId", arr.toString()).apply()
+        }
+    }
+
+    fun createForeshadowing(paragraphIndex: Int, content: String) {
+        val f = Foreshadowing(
+            workId               = workId,
+            chapterId            = chapterId,
+            createdParagraphIndex = paragraphIndex,
+            content              = content
+        )
+        _foreshadowings.value = _foreshadowings.value + f
+        saveForeshadowings()
+    }
+
+    fun recycleForeshadowing(foreshadowingId: String) {
+        _foreshadowings.value = _foreshadowings.value.map { f ->
+            if (f.id == foreshadowingId) f.copy(
+                status                = ForeshadowingStatus.RECYCLED,
+                recycledChapterId     = chapterId,
+                recycledParagraphIndex = _selectedParagraphIndex.value,
+                recycledAt            = System.currentTimeMillis()
+            ) else f
+        }
+        saveForeshadowings()
+    }
+
+    fun unrecycleForeshadowing(foreshadowingId: String) {
+        _foreshadowings.value = _foreshadowings.value.map { f ->
+            if (f.id == foreshadowingId) f.copy(
+                status                = ForeshadowingStatus.PENDING,
+                recycledChapterId     = null,
+                recycledParagraphIndex = null,
+                recycledAt            = null
+            ) else f
+        }
+        saveForeshadowings()
+    }
+
+    // ── JSON 序列化 ───────────────────────────────────────────────────────────
+
+    private fun foreshadowingsToJson(list: List<Foreshadowing>): JSONArray = JSONArray().also { arr ->
+        list.forEach { f ->
+            arr.put(JSONObject().apply {
+                put("id",                    f.id)
+                put("workId",                f.workId)
+                put("chapterId",             f.chapterId)
+                put("createdParagraphIndex", f.createdParagraphIndex)
+                put("content",               f.content)
+                put("status",                f.status.name)
+                put("createdAt",             f.createdAt)
+                f.recycledChapterId?.let     { put("recycledChapterId", it) }
+                f.recycledParagraphIndex?.let { put("recycledParagraphIndex", it) }
+                f.recycledAt?.let            { put("recycledAt", it) }
+            })
+        }
+    }
+
+    private fun jsonToForeshadowings(arr: JSONArray): List<Foreshadowing> =
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            Foreshadowing(
+                id                    = obj.optString("id"),
+                workId                = obj.optString("workId"),
+                chapterId             = obj.optString("chapterId"),
+                createdParagraphIndex = obj.optInt("createdParagraphIndex"),
+                content               = obj.optString("content"),
+                status                = try { ForeshadowingStatus.valueOf(obj.optString("status")) }
+                                        catch (e: Exception) { ForeshadowingStatus.PENDING },
+                createdAt             = obj.optLong("createdAt"),
+                recycledChapterId     = obj.optString("recycledChapterId").ifEmpty { null },
+                recycledParagraphIndex = if (obj.has("recycledParagraphIndex")) obj.optInt("recycledParagraphIndex") else null,
+                recycledAt            = if (obj.has("recycledAt")) obj.optLong("recycledAt") else null
+            )
+        }
 
     fun toggleGlossaryPanel() {
         val opening = !_showGlossaryPanel.value
@@ -239,8 +373,39 @@ class ChapterEditorViewModel : ViewModel() {
     fun closeAllPanels() {
         _showNestedListPanel.value = false
         _showForeshadowingPanel.value = false
+        _showForeshadowingSheet.value = false
         _showGlossaryPanel.value = false
         _showTextStylePanel.value = false
+    }
+
+    // 新建章节弹窗触发（最后一章点下一章时）
+    private val _showCreateChapterDialog = MutableStateFlow(false)
+    val showCreateChapterDialog: StateFlow<Boolean> = _showCreateChapterDialog.asStateFlow()
+
+    fun dismissCreateChapterDialog() { _showCreateChapterDialog.value = false }
+
+    /** 在当前卷末尾新建章节，创建后导航过去 */
+    fun createChapterAndNavigate(title: String, onNavigate: (String, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val newChapter = com.cwriter.data.model.Chapter(
+                    title    = title.ifBlank { "新章节" },
+                    content  = "",
+                    volumeId = volumeId
+                )
+                val created = if (volumeId.isNotEmpty()) {
+                    repository?.createChapter(userId, workId, volumeId, newChapter)
+                } else null
+                if (created != null) {
+                    _showCreateChapterDialog.value = false
+                    onNavigate(created.id, volumeId)
+                } else {
+                    showSnackbar("新建章节失败")
+                }
+            } catch (e: Exception) {
+                showSnackbar("新建章节失败: ${e.message}")
+            }
+        }
     }
 
     // 返回 (chapterId, volumeId)
@@ -249,14 +414,20 @@ class ChapterEditorViewModel : ViewModel() {
         if (idx > 0) {
             val (cid, vid) = allChapterPairs[idx - 1]
             onNavigate(cid, vid)
+        } else {
+            showSnackbar("没有上一章了")
         }
     }
 
     fun navigateToNextChapter(onNavigate: (String, String) -> Unit) {
         val idx = allChapterPairs.indexOfFirst { it.first == chapterId }
-        if (idx < allChapterPairs.size - 1) {
+        if (idx >= 0 && idx < allChapterPairs.size - 1) {
             val (cid, vid) = allChapterPairs[idx + 1]
             onNavigate(cid, vid)
+        } else {
+            // allChapterPairs 只含有章节的卷，所以这里就是真正的最后一章
+            // 空卷不影响判断，直接弹新建章节
+            _showCreateChapterDialog.value = true
         }
     }
 

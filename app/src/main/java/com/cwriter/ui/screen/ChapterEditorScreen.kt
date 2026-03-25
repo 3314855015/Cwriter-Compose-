@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +29,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -45,6 +48,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cwriter.data.model.Chapter
 import com.cwriter.ui.components.ForeshadowingBottomSheet
+import com.cwriter.ui.components.ForeshadowingOverlayPanel
 import com.cwriter.ui.components.GlossaryPanel
 import com.cwriter.ui.components.NestedListPanel
 import com.cwriter.ui.theme.NavBarBackground
@@ -86,6 +90,10 @@ fun ChapterEditorScreen(
     val showGlossaryPanel      by viewModel.showGlossaryPanel.collectAsState()
     val hasPrevChapter         by viewModel.hasPrevChapter.collectAsState()
     val hasNextChapter         by viewModel.hasNextChapter.collectAsState()
+    val showCreateChapterDialog by viewModel.showCreateChapterDialog.collectAsState()
+    val foreshadowings         by viewModel.foreshadowings.collectAsState()
+    val selectedParagraphIndex by viewModel.selectedParagraphIndex.collectAsState()
+    val showForeshadowingSheet by viewModel.showForeshadowingSheet.collectAsState()
 
     var keyboardHeight by remember { mutableStateOf(0.dp) }
     var screenHeightPx by remember { mutableStateOf(0) }
@@ -190,20 +198,24 @@ fun ChapterEditorScreen(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 } else {
                     EditorContent(
-                        chapter           = chapter,
-                        workTitle         = work?.title ?: "",
-                        editorState       = editorState,
-                        focusRequester    = focusRequester,
-                        fontSize          = fontSize,
-                        lineHeight        = lineHeight,
-                        textColor         = contentTextColor,
-                        scrollState       = scrollState,
-                        keyboardHeight    = keyboardHeight,
-                        screenHeightPx    = screenHeightPx,
-                        density           = density,
-                        pendingInsertText = viewModel.pendingInsertText.collectAsState().value,
-                        onInsertConsumed  = { viewModel.clearPendingInsert() },
-                        onContentChange   = { viewModel.updateContent(it) }
+                        chapter              = chapter,
+                        workTitle            = work?.title ?: "",
+                        editorState          = editorState,
+                        focusRequester       = focusRequester,
+                        fontSize             = fontSize,
+                        lineHeight           = lineHeight,
+                        textColor            = contentTextColor,
+                        scrollState          = scrollState,
+                        keyboardHeight       = keyboardHeight,
+                        screenHeightPx       = screenHeightPx,
+                        density              = density,
+                        pendingInsertText    = viewModel.pendingInsertText.collectAsState().value,
+                        onInsertConsumed     = { viewModel.clearPendingInsert() },
+                        onContentChange      = { viewModel.updateContent(it) },
+                        onTitleChange        = { viewModel.updateTitle(it) },
+                        foreshadowings       = foreshadowings,
+                        showForeshadowingOverlay = showForeshadowingPanel,
+                        onParagraphIconClick = { idx -> viewModel.openForeshadowingSheet(idx) }
                     )
                 }
             }
@@ -297,12 +309,30 @@ fun ChapterEditorScreen(
             onDismiss    = { viewModel.toggleGlossaryPanel() },
             onInsertText = { text -> viewModel.requestInsertText(text) }
         )
-        if (showForeshadowingPanel) {
+        // showForeshadowingPanel = 图标叠加层开关（在 EditorContent 内部处理）
+        // showForeshadowingSheet = 点击图标后弹出的底部弹窗
+        if (showForeshadowingSheet) {
             ForeshadowingBottomSheet(
-                isVisible = true, paragraphIndex = 0,
-                currentChapterId = chapterId, foreshadowings = emptyList(),
-                onDismiss = { viewModel.toggleForeshadowingPanel() },
-                onCreateForeshadowing = {}, onRecycleForeshadowing = {}, onUnrecycleForeshadowing = {}
+                isVisible              = true,
+                paragraphIndex         = selectedParagraphIndex,
+                currentChapterId       = chapterId,
+                foreshadowings         = foreshadowings,
+                onDismiss              = { viewModel.closeForeshadowingSheet() },
+                onCreateForeshadowing  = { content -> viewModel.createForeshadowing(selectedParagraphIndex, content) },
+                onRecycleForeshadowing = { id -> viewModel.recycleForeshadowing(id) },
+                onUnrecycleForeshadowing = { id -> viewModel.unrecycleForeshadowing(id) }
+            )
+        }
+
+        // ── 新建章节模态框（最后一章点下一章时弹出）
+        if (showCreateChapterDialog) {
+            CreateNextChapterDialog(
+                onDismiss = { viewModel.dismissCreateChapterDialog() },
+                onConfirm = { title ->
+                    viewModel.createChapterAndNavigate(title) { cid, vid ->
+                        onNavigateToChapter?.invoke(cid, vid)
+                    }
+                }
             )
         }
     }
@@ -403,7 +433,11 @@ fun EditorContent(
     density: androidx.compose.ui.unit.Density,
     pendingInsertText: String?,
     onInsertConsumed: () -> Unit,
-    onContentChange: (String) -> Unit
+    onContentChange: (String) -> Unit,
+    onTitleChange: (String) -> Unit = {},
+    foreshadowings: List<com.cwriter.data.model.Foreshadowing> = emptyList(),
+    showForeshadowingOverlay: Boolean = false,
+    onParagraphIconClick: (Int) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val textStyle = TextStyle(
@@ -414,36 +448,38 @@ fun EditorContent(
     val lineHeightPx = with(density) { (fontSize * lineHeight).sp.toPx() }
     var textFieldTopPx by remember { mutableStateOf(0f) }
 
-    // TextFieldValue 本地状态：持有文字 + 光标/选区，不依赖外部 chapter.content 驱动
-    // 仅在 chapter.content 与本地文字不一致时（外部写入，如加载/撤销）才同步
+    // 段落位置：key=段落索引, value=(topPx, bottomPx) 相对于内容区域
+    val paragraphBounds = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+
     var tfv by remember { mutableStateOf(TextFieldValue("")) }
     val externalContent = chapter?.content ?: ""
     LaunchedEffect(externalContent) {
         if (tfv.text != externalContent) {
-            // 外部内容变化（加载/撤销/重做）：更新文字，光标移到末尾
             tfv = TextFieldValue(externalContent,
                 selection = androidx.compose.ui.text.TextRange(externalContent.length))
         }
     }
 
-    // 词库插入：在当前光标位置插入文字
-    // 对应 UniApp 的 handleInsertText：before + text + after，光标移到插入点之后
     LaunchedEffect(pendingInsertText) {
         val insertText = pendingInsertText ?: return@LaunchedEffect
         val cursor = tfv.selection.end.coerceIn(0, tfv.text.length)
         val before = tfv.text.substring(0, cursor)
         val after  = tfv.text.substring(cursor)
         val newText = before + insertText + after
-        val newCursor = cursor + insertText.length
-        tfv = TextFieldValue(newText, selection = androidx.compose.ui.text.TextRange(newCursor))
+        tfv = TextFieldValue(newText, selection = androidx.compose.ui.text.TextRange(cursor + insertText.length))
         onContentChange(newText)
         onInsertConsumed()
     }
 
-    val bottomPadding = if (editorState == EditorState.C)
-        keyboardHeight + 52.dp + 40.dp
-    else
-        40.dp
+    val bottomPadding = if (editorState == EditorState.C) keyboardHeight + 52.dp + 40.dp else 40.dp
+
+    // 段落列表（B状态只读时用于测量位置）
+    val paragraphs = remember(externalContent) {
+        externalContent.split("\n").filter { it.isNotBlank() }
+    }
+
+    // 内容区域顶部偏移（用于段落坐标系对齐）
+    var contentAreaTopPx by remember { mutableStateOf(0f) }
 
     Column(
         modifier = Modifier
@@ -452,19 +488,52 @@ fun EditorContent(
             .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // 章节标题（居中，三态均显示）
-        Text(
-            text       = chapter?.title ?: "",
-            fontSize   = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color      = textColor,
-            textAlign  = TextAlign.Center,
-            modifier   = Modifier.fillMaxWidth()
-        )
+        // ── 章节标题 ─────────────────────────────────────────────────────────
+        if (editorState == EditorState.C) {
+            // C状态：可编辑标题
+            CompositionLocalProvider(
+                LocalTextSelectionColors provides TextSelectionColors(
+                    handleColor     = Color.Transparent,
+                    backgroundColor = Blue.copy(alpha = 0.3f)
+                )
+            ) {
+                BasicTextField(
+                    value       = chapter?.title ?: "",
+                    onValueChange = { onTitleChange(it) },
+                    textStyle   = TextStyle(
+                        fontSize   = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = textColor,
+                        textAlign  = TextAlign.Center
+                    ),
+                    cursorBrush = SolidColor(Blue),
+                    modifier    = Modifier.fillMaxWidth(),
+                    decorationBox = { inner ->
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            if ((chapter?.title ?: "").isEmpty()) {
+                                Text("章节标题", fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                                    color = textColor.copy(alpha = 0.3f), textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth())
+                            }
+                            inner()
+                        }
+                    }
+                )
+            }
+        } else {
+            Text(
+                text       = chapter?.title ?: "",
+                fontSize   = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color      = textColor,
+                textAlign  = TextAlign.Center,
+                modifier   = Modifier.fillMaxWidth()
+            )
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // 作品名·字数（A/B 状态居中，在分割线上方；C 状态隐藏）
+        // 作品名·字数（A/B 状态，C 状态隐藏，无分割线）
         if (editorState != EditorState.C) {
             Text(
                 text      = "$workTitle · ${chapter?.wordCount ?: 0}字",
@@ -475,62 +544,103 @@ fun EditorContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        HorizontalDivider(color = textColor.copy(alpha = 0.15f), thickness = 0.8.dp)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 内容
-        if (editorState == EditorState.C) {
-            // 隐藏水滴手柄（handleColor=Transparent），保留蓝色选区背景
-            CompositionLocalProvider(
-                LocalTextSelectionColors provides TextSelectionColors(
-                    handleColor      = Color.Transparent,
-                    backgroundColor  = Blue.copy(alpha = 0.3f)
-                )
-            ) {
-                BasicTextField(
-                    value = tfv,
-                    onValueChange = { newTfv ->
-                        val oldText = tfv.text
-                        val newText = newTfv.text
+        // ── 内容区（B状态：段落列表+伏笔图标叠加；C状态：编辑框）──────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coords ->
+                    contentAreaTopPx = coords.positionInRoot().y
+                }
+        ) {
+            if (editorState == EditorState.C) {
+                CompositionLocalProvider(
+                    LocalTextSelectionColors provides TextSelectionColors(
+                        handleColor     = Color.Transparent,
+                        backgroundColor = Blue.copy(alpha = 0.3f)
+                    )
+                ) {
+                    BasicTextField(
+                        value = tfv,
+                        onValueChange = { newTfv ->
+                            val oldText = tfv.text
+                            val newText = newTfv.text
+                            val processed = applyAutoIndent(oldText, newText)
+                            if (processed != newText) {
+                                val extraChars = processed.length - newText.length
+                                val newCursor = (newTfv.selection.end + extraChars).coerceIn(0, processed.length)
+                                tfv = TextFieldValue(processed, selection = androidx.compose.ui.text.TextRange(newCursor))
+                                onContentChange(processed)
+                            } else {
+                                tfv = newTfv
+                                onContentChange(newText)
+                            }
+                            if (keyboardHeight > 0.dp && screenHeightPx > 0 && textFieldTopPx > screenHeightPx / 2f) {
+                                coroutineScope.launch { scrollState.animateScrollBy(lineHeightPx) }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            .onGloballyPositioned { coords -> textFieldTopPx = coords.positionInRoot().y },
+                        textStyle   = textStyle,
+                        cursorBrush = SolidColor(Blue)
+                    )
+                }
+            } else {
+                // A/B 状态：分段显示，每段测量位置供伏笔图标定位
+                // showForeshadowingOverlay 开启时右侧留 14dp 给图标列（12dp图标 + 2dp间距）
+                val showForeshadowing = (editorState == EditorState.A || editorState == EditorState.B) && showForeshadowingOverlay
+                // 段落间距 = lineHeight * fontSize / 2（模拟行距视觉效果）
+                val paraSpacingDp = with(density) { (fontSize * (lineHeight - 1f) / 2f).sp.toDp() }
 
-                        // 自动缩进：行数增加时处理
-                        val processed = applyAutoIndent(oldText, newText)
-                        if (processed != newText) {
-                            // 缩进改变了文字：更新文字，光标移到新行缩进后
-                            val extraChars = processed.length - newText.length
-                            val newCursor = (newTfv.selection.end + extraChars).coerceIn(0, processed.length)
-                            tfv = TextFieldValue(
-                                text      = processed,
-                                selection = androidx.compose.ui.text.TextRange(newCursor)
-                            )
-                            onContentChange(processed)
-                        } else {
-                            tfv = newTfv
-                            onContentChange(newText)
-                        }
-
-                        // 换行时若光标在屏幕下半，自动滚动一行
-                        if (keyboardHeight > 0.dp && screenHeightPx > 0
-                            && textFieldTopPx > screenHeightPx / 2f) {
-                            coroutineScope.launch { scrollState.animateScrollBy(lineHeightPx) }
-                        }
-                    },
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .onGloballyPositioned { coords ->
-                            textFieldTopPx = coords.positionInRoot().y
+                        .padding(end = if (showForeshadowing) 14.dp else 0.dp)
+                ) {
+                    if (paragraphs.isEmpty()) {
+                        Text("暂无内容...", style = textStyle.copy(color = textColor.copy(alpha = 0.4f)))
+                    } else {
+                        paragraphs.forEachIndexed { index, para ->
+                            if (index > 0) Spacer(Modifier.height(paraSpacingDp))
+                            Text(
+                                text     = para,
+                                style    = textStyle,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onGloballyPositioned { coords ->
+                                        // 存 px 值，后续转 dp 时用 density
+                                        val topPx    = coords.positionInRoot().y - contentAreaTopPx
+                                        val bottomPx = topPx + coords.size.height
+                                        paragraphBounds[index] = topPx to bottomPx
+                                    }
+                            )
+                        }
+                    }
+                }
+
+                // 伏笔图标叠加层（A/B状态，且 showForeshadowingOverlay 开启时）
+                if (showForeshadowing) {
+                    val localDensity = density
+                    ForeshadowingOverlayPanel(
+                        foreshadowings   = foreshadowings,
+                        paragraphBounds  = paragraphBounds.mapValues { (idx, tb) ->
+                            // px → dp 转换，top/bottom 存 dp float 值
+                            com.cwriter.ui.components.ParagraphBounds(
+                                index  = idx,
+                                top    = with(localDensity) { tb.first.toDp().value },
+                                bottom = with(localDensity) { tb.second.toDp().value }
+                            )
                         },
-                    textStyle   = textStyle,
-                    cursorBrush = SolidColor(Blue)
-                )
+                        currentChapterId = chapter?.id ?: "",
+                        isClickable      = true,
+                        onIconClick      = onParagraphIconClick,
+                        modifier         = Modifier.align(Alignment.TopEnd).width(12.dp)
+                    )
+                }
             }
-        } else {
-            Text(
-                text  = chapter?.content?.ifEmpty { "暂无内容..." } ?: "暂无内容...",
-                style = textStyle
-            )
         }
 
         Spacer(modifier = Modifier.height(bottomPadding))
@@ -613,7 +723,8 @@ fun EditorBottomBar(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    PngToolSlot(com.cwriter.R.drawable.last,  "上一章",  enabled = hasPrevChapter, onClick = onPrevChapter)
+                    // 上一章：始终可点击，没有上一章时由 ViewModel 显示 snackbar
+                    PngToolSlot(com.cwriter.R.drawable.last, "上一章", enabled = true, onClick = onPrevChapter)
                     Spacer(Modifier.weight(1f))
                     PngToolSlot(com.cwriter.R.drawable.read,  "阅读模式", active = readMode == ReadMode.PAGE, onClick = onToggleReadMode)
                     Spacer(Modifier.weight(1f))
@@ -623,7 +734,13 @@ fun EditorBottomBar(
                         onClick    = onToggleTheme
                     )
                     Spacer(Modifier.weight(1f))
-                    PngToolSlot(com.cwriter.R.drawable.next,  "下一章",  enabled = hasNextChapter, onClick = onNextChapter)
+                    // 下一章：始终可点击，最后一章时由 ViewModel 弹新建对话框
+                    PngToolSlot(
+                        drawableId = com.cwriter.R.drawable.next,
+                        label      = "下一章",
+                        enabled    = true,
+                        onClick    = onNextChapter
+                    )
                 }
 
                 // C状态：字数 + → + T
@@ -736,6 +853,68 @@ fun TextStylePanel(
                 )
                 Text(String.format("%.1f", lineHeight), color = Color(0xFFE0E0E0), fontSize = 13.sp,
                     modifier = Modifier.width(28.dp), textAlign = TextAlign.End)
+            }
+        }
+    }
+}
+
+// ─── 新建章节模态框（最后一章点下一章时弹出）────────────────────────────────
+/**
+ * 简化版新建章节对话框：只输入标题，不选卷（默认当前卷）
+ * 对应 UniApp 的 CreateChapterModal，但去掉卷选择
+ */
+@Composable
+fun CreateNextChapterDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (title: String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF252525)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("新建章节", color = Color(0xFFE0E0E0), fontSize = 18.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+
+                Spacer(Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value         = title,
+                    onValueChange = { title = it },
+                    modifier      = Modifier.fillMaxWidth(),
+                    placeholder   = { Text("章节标题（可留空）", color = Color(0xFF666666)) },
+                    textStyle     = androidx.compose.ui.text.TextStyle(
+                        color    = Color(0xFFE0E0E0),
+                        fontSize = 16.sp
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = Blue,
+                        unfocusedBorderColor = Color(0xFF333333),
+                        cursorColor          = Blue
+                    ),
+                    singleLine = true
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("取消", color = Color(0xFF888888))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { onConfirm(title) }) {
+                        Text("创建", color = Blue)
+                    }
+                }
             }
         }
     }
