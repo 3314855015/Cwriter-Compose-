@@ -286,7 +286,11 @@ fun ChapterEditorScreen(
         }
 
         // ── 功能面板
-        NestedListPanel(isVisible = showNestedListPanel, onDismiss = { viewModel.toggleNestedListPanel() })
+        NestedListPanel(
+            isVisible = showNestedListPanel,
+            workId    = workId,
+            onDismiss = { viewModel.toggleNestedListPanel() }
+        )
         GlossaryPanel(
             isVisible    = showGlossaryPanel,
             workId       = workId,
