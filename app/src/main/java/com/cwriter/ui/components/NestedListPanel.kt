@@ -131,7 +131,9 @@ class NestedListViewModel : ViewModel() {
     /** 点击子项 → 进入子层级（子项列表变成新的父栏） */
     fun enterChildLevel(item: NestedItem) {
         val current = _selectedItem.value ?: return
+        // 压栈：保存当前层级的列表快照 + 当前选中项
         pathStack.add(PathFrame(currentLevelMutable.toList(), current))
+        // 进入下一层：current.children 成为新的父栏
         currentLevelMutable = current.children
         _currentLevelItems.value = currentLevelMutable.toList()
         _selectedItem.value = item
@@ -139,13 +141,26 @@ class NestedListViewModel : ViewModel() {
         _isAtTopLevel.value = false
     }
 
-    /** 返回上一层 */
+    /**
+     * 返回上一层
+     * 对照 UniApp：pathStack.slice(0, -1)，弹出最后一帧，恢复上一层状态
+     * 崩溃原因：removeLast() 在低版本 Android 上不存在于 java.util.List 接口
+     * 修法：用 removeAt(size-1) 替代
+     */
     fun goBack() {
         if (pathStack.isEmpty()) return
-        val frame = pathStack.removeLast()
+        val lastIndex = pathStack.size - 1
+        val frame = pathStack[lastIndex]
+        pathStack.removeAt(lastIndex)
+
         // 恢复上一层的可变引用
-        currentLevelMutable = if (pathStack.isEmpty()) rootItems
-                              else pathStack.last().selectedItem!!.children
+        // 如果栈空了 → 回到根级；否则 → 上一帧 selectedItem 的 children
+        currentLevelMutable = if (pathStack.isEmpty()) {
+            rootItems
+        } else {
+            pathStack[pathStack.size - 1].selectedItem?.children ?: rootItems
+        }
+
         _currentLevelItems.value = frame.items
         _selectedItem.value = frame.selectedItem
         _childItems.value = frame.selectedItem?.children?.toList() ?: emptyList()
@@ -411,7 +426,7 @@ fun NestedListPanel(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmEnterItem = null }) { Text("取消") }
+                TextButton(onClick = { confirmEnterItem = null }) { Text("取消", color = Color(0xFF888888)) }
             },
             containerColor = Color(0xFF252525),
             titleContentColor = Color(0xFFE0E0E0),
@@ -431,7 +446,7 @@ fun NestedListPanel(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteParentTarget = null }) { Text("取消") }
+                TextButton(onClick = { deleteParentTarget = null }) { Text("取消", color = Color(0xFF888888)) }
             },
             containerColor = Color(0xFF252525),
             titleContentColor = Color(0xFFE0E0E0),
@@ -451,7 +466,7 @@ fun NestedListPanel(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteChildTarget = null }) { Text("取消") }
+                TextButton(onClick = { deleteChildTarget = null }) { Text("取消", color = Color(0xFF888888)) }
             },
             containerColor = Color(0xFF252525),
             titleContentColor = Color(0xFFE0E0E0),
