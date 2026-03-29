@@ -31,6 +31,7 @@
 #### 搞懂了优势，劣势，你就知道，这个组件该如何使用？
 
 - 为了方便描述，上边的人物/地点/能力，我们叫它切换栏(一次索引)，占下边1/3的，我们叫它父栏(二次索引)，剩下的2/3，叫子栏(内容栏)
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/70b0363c-0e5f-406a-b203-0cbdaefdfad5" />
 
 
