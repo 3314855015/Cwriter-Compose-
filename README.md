@@ -245,10 +245,13 @@ app/src/main/java/com/cwriter/
   此时，正逢学校新一轮项目实训，我就诞生了，为什么不开发一个本地安全的App项目呢？哪怕学校那边完全不在意，我也能够自己用，不会像我前边两个SpringBoot项目一样，学校服务器资源一收回，你只能瞪着运行的代码干发呆。
   
   
-  
+
+## 七，如何安装Cwriter
+
+release测试版本已发布https://github.com/3314855015/Cwriter-Compose-/releases/tag/v1.0.test
   
 
-## 七，许可证
+## 八，许可证
 
 本项目使用 [MIT](LICENSE) 许可证开源。
 
