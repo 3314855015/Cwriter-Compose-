@@ -80,11 +80,6 @@ data class GlossaryData(
  *  1. 持有词库数据（StateFlow 驱动 UI）
  *  2. 持久化到 SharedPreferences（key = "glossary_<workId>"）
  *  3. 暴露增删、类型切换、父/子项选择等操作
- *
- * 面试讲解要点：
- *  - ViewModel 生命周期比 Composable 长，数据在屏幕旋转/重组时不丢失
- *  - StateFlow 是热流，collect 时立即拿到最新值，适合 UI 状态
- *  - IO 操作放 viewModelScope + Dispatchers.IO，不阻塞主线程
  */
 class GlossaryViewModel : ViewModel() {
 

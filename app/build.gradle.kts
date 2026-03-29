@@ -20,12 +20,29 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 禁用调试信息
+            isDebuggable = false
         }
+        debug {
+            isDebuggable = true
+        }
+    }
+    
+    // APK 输出配置
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                val outputFileName = "CWriter-${variant.buildType.name}-v${variant.versionName}.apk"
+                output.outputFileName = outputFileName
+            }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
