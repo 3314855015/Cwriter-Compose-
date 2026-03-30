@@ -34,15 +34,13 @@
   
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/70b0363c-0e5f-406a-b203-0cbdaefdfad5" />
 
-
 #### 关键点一
 
 - 为了保有“模糊记忆”，子栏中的描述，最后只是一个简单的索引，至于简单到什么程度，视你记忆而定。
 
 - 作者配置——由于面板附带【粘贴板】那样的光标便捷插入功能，我更喜欢子栏极简化(只写一个关键字tag)，例如，如果要记“最好的五个人”，我会把一级索引切换到【人物】，二级索引打上【最好的五个人】，子栏里填写具体名字
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/5d885bdd-b153-4f71-bd56-4bea3439431b" />
-
 
 #### 关键点二
 
@@ -53,42 +51,38 @@
 
 - 另一种配置——「二级索引优先」
   我没怎么用过，但按照我的想法，这种方法，二级索引处，填的才是和一级索引相吻合的，一般用于画地图
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/7434756f-948b-46ce-8c45-d57f8ab9464c" />
-
 
 #### 最后，作者的一些常用扩展用法：
 
 - 【基于Java类声明扩展实例用法】
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/4dbedbf1-aef6-486b-940d-f3d246de4019" />
 
-
 - 【基于不同二级索引下字段可重复关系网用法】
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/3b569305-d13c-49c1-9cd5-ec93f3311580" />
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/1c9d746e-7a6f-4bad-a62a-07e1900cae71" />
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/4d1ec45b-b6b9-4d5a-b6fe-199aa8e42432" />
 
 - 【基于能力tag的完善世界故事能力体系用法】
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/efb1cffb-d058-4cec-b025-e32575aadc9f" />
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/b0cc8436-be00-42ee-a519-a77b0558a1e3" />
 
 - 【基于双重地点构筑的类地图用法】
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/3fd39730-91ab-4d0c-9b0e-d87e00036c68" />
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/99b9ddc9-25a9-4b6a-8058-aeabe3878176" />
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/157e77a2-ddca-4422-b79a-38ea2443b50d" />
 
 - 【基于字段名重要活动参与情况人物回忆用法】
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/ecc6c48d-9756-4c66-a00f-74fc5583a18a" />
 
 - 【基于情节构筑删去人物便捷制造矛盾用法】
-
   图片同上，例如，回忆起周一打乒乓球的三个人，后边写再写乒乓球球时，可以便捷减少参与人物，来引人思考——“为什么这个人周一都去，今天就不去了呢？”
-
 
 ### 换位思考，模拟段评，评论“剧透”法，如何解伏笔管理显示问题？
 
@@ -97,11 +91,11 @@
 - 我这里采用的呢，是段评剧透模拟，采用一个icon图标开关【段评】，受看小说时被人剧透的启发，从“现在的自己”，“未来的自己”，“更未来的自己”三个角度，分别解决了他们各自的需要——“现在的自己创造记录回收伏笔”，“未来的自己需要知道还有多少伏笔埋下未回收”，“更未来的自己需要知道，自己在哪埋了伏笔，又是在哪回收的”。
 
 - 给不会用的(可能看小说评论区少的)提一嘴：写到自己预备有伏笔的段落时，不要吝啬你心中的想法，大大方方将剧透打在评论区【创造伏笔】内，给未来的自己需要【回收伏笔】时分享分享，帮助他回忆回忆，最后轮到回收时，直接长按注释掉就可以了。（目前UI有点抽象，而且，有些错别字，理解理解）
-
+  
   <img width="290" height="640" alt="image" src="https://github.com/user-attachments/assets/1a8e5b15-11fe-409b-8949-bc06b66380d5" />
   <img width="290" height="640" alt="image" src="https://github.com/user-attachments/assets/f20ad1cd-7ff7-4987-8298-bd0f9e6d9e5c" />
 
-- 该功能没什么好说的，核心解决思路并没有变，变的只是显示模式，不过应该还有优化空间，主要是UI挤占内容区域可能不太美观。
+- 该功能核心解决思路并没有变，变的只是显示模式，不过应该还有优化空间，主要是UI挤占内容区域可能不太美观。
 
 ### “页面”回退，线性模板展示树形结构，如何解写作“顾后”过程中需要频繁删改大纲问题？
 
@@ -112,13 +106,10 @@
 - 我解决这两个问题的方法呢，就是保留树形结构扩展性高的同时，使用层序遍历树这个算法的思想，把每一个根节点及其所有的子树结构化，通过路径栈和页面回退，线性展示了树形结构，保留了一定扩展性的同时，极大的提升了可读性与层次感。
 
 - 该功能完全适配主流的两种故事大纲的构造，【时间线模式】【事件模式】。【事件模式】呢，顾名思义，适用于时间跨度大，按事件记事的大纲；【时间线模式】呢，适用于时间限制高，重复性强的场景（类似学院生活，天以内的副本解密），这里放两张【时间线模式】示意图：
-
+  
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/d0047266-37d4-4842-96e8-382850f4ed3f" />
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/10aa1814-23c1-410f-9832-5740c65e2d89" />
   <img width="190" height="400" alt="image" src="https://github.com/user-attachments/assets/512e9823-7d6b-433d-9f20-03da6e6915da" />
-
-
-
 
 ## 三，技术栈
 
@@ -127,7 +118,7 @@
 | **Kotlin**            | 主要开发语言            |
 | **Jetpack Compose**   | 现代 Android UI 工具包 |
 | **MVVM**              | 架构模式，分离视图与业务逻辑    |
-| **Kotlin Coroutines** | 协程，用于异步数据处理（待集成）  |
+| **Kotlin Coroutines** | 协程，用于异步数据处理       |
 | **本地存储**              | 基于文件系统的本地数据持久化    |
 
 ### 依赖库
@@ -218,7 +209,7 @@ app/src/main/java/com/cwriter/
 
 - [ ] 章节编辑页面在文章中间换行时，自动缩进不生效问题
 - [ ] 编辑过程中，最左边难以选中，右边选中不了的问题
-- [ ] 编辑过程中，光标效果不是很理想的问题
+- [x] 编辑过程中，光标效果不是很理想的问题
 - [ ] 伏笔创作后，删除失效的问题
 - [ ] 故事树组件最上层父单元，点击无法删除问题
 - [ ] 功能组件【故事树】与【沉浸式写作面板】，滚动过程中容易误触点击的问题
@@ -250,12 +241,10 @@ app/src/main/java/com/cwriter/
   整整30w字，差点就没了，害得我半夜都想给手机扔了。
   此时，正逢学校新一轮项目实训，我就诞生了，为什么不开发一个本地安全的App项目呢？哪怕学校那边完全不在意，我也能够自己用，不会像我前边两个SpringBoot项目一样，学校服务器资源一收回，你只能瞪着运行的代码干发呆。
   （未完待续）
-  
 
 ## 七，如何安装Cwriter
 
 release测试版本已发布https://github.com/3314855015/Cwriter-Compose-/releases/tag/v1.0.test
-  
 
 ## 八，许可证
 
