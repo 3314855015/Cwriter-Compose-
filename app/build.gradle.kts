@@ -40,7 +40,7 @@ android {
         variant.outputs
             .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
             .forEach { output ->
-                val outputFileName = "CWriter-${variant.buildType.name}-v${variant.versionName}.apk"
+                val outputFileName = "Cwriter-${variant.buildType.name}-v${variant.versionName}.apk"
                 output.outputFileName = outputFileName
             }
     }
