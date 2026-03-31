@@ -68,11 +68,6 @@ data class PathFrame(
  *  selectedItem     — 父栏当前选中项（子栏显示其 children）
  *  childItems       — 子栏列表（= selectedItem.children）
  *  pathStack        — 路径栈，每次"进入子层级"时压栈，"返回"时弹栈
- *
- * 面试讲解：
- *  - 多级列表用路径栈实现无限层级导航，类似文件系统的 cd/cd..
- *  - 持久化用 SharedPreferences + JSON，key 按 workId 隔离
- *  - 所有 IO 操作在 viewModelScope + Dispatchers.IO，不阻塞主线程
  */
 class NestedListViewModel : ViewModel() {
 
