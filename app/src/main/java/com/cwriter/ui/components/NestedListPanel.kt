@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.cwriter.data.repository.FileStorageRepository
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -94,15 +95,19 @@ class NestedListViewModel : ViewModel() {
     private val pathStack: MutableList<PathFrame> = mutableListOf()
 
     private var context: Context? = null
+    private var userId: String = ""
     private var workId: String = ""
+    private var repository: FileStorageRepository? = null
 
     // ── 初始化 ──────────────────────────────────────────────────────────────
 
-    fun init(context: Context, workId: String) {
+    fun init(context: Context, userId: String, workId: String) {
         this.context = context
+        this.userId = userId
         this.workId = workId
+        this.repository = FileStorageRepository(context)
         viewModelScope.launch(Dispatchers.IO) {
-            val loaded = loadFromPrefs()
+            val loaded = loadData()
             withContext(Dispatchers.Main) {
                 rootItems = loaded
                 currentLevelMutable = rootItems
@@ -232,21 +237,42 @@ class NestedListViewModel : ViewModel() {
     // ── 持久化 ───────────────────────────────────────────────────────────────
 
     private fun save() {
-        val ctx = context ?: return
+        val repo = repository ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val json = JSONObject().put("rootItems", itemListToJson(rootItems))
-            ctx.getSharedPreferences("cwriter_nested", Context.MODE_PRIVATE)
-                .edit().putString("nested_$workId", json.toString()).apply()
+            repo.saveNestedList(userId, workId, json.toString())
         }
     }
 
-    private fun loadFromPrefs(): MutableList<NestedItem> {
+    /**
+     * 加载数据：优先从文件系统读取；文件不存在时从 SP 迁移
+     */
+    private suspend fun loadData(): MutableList<NestedItem> {
+        val repo = repository ?: return mutableListOf()
         val ctx = context ?: return mutableListOf()
-        val str = ctx.getSharedPreferences("cwriter_nested", Context.MODE_PRIVATE)
-            .getString("nested_$workId", null) ?: return mutableListOf()
-        return try {
-            jsonToItemList(JSONObject(str).optJSONArray("rootItems"))
-        } catch (e: Exception) { mutableListOf() }
+        val fileContent = repo.readNestedList(userId, workId)
+        if (fileContent != null) {
+            return try {
+                jsonToItemList(JSONObject(fileContent).optJSONArray("rootItems"))
+            } catch (e: Exception) { mutableListOf() }
+        }
+        // 文件不存在 → 尝试从 SP 迁移
+        val spStr = ctx.getSharedPreferences("cwriter_nested", Context.MODE_PRIVATE)
+            .getString("nested_$workId", null)
+        if (spStr != null) {
+            val items = try {
+                jsonToItemList(JSONObject(spStr).optJSONArray("rootItems"))
+            } catch (e: Exception) { mutableListOf() }
+            if (items.isNotEmpty()) {
+                val json = JSONObject().put("rootItems", itemListToJson(items))
+                repo.saveNestedList(userId, workId, json.toString())
+                // 迁移成功后清理 SP
+                ctx.getSharedPreferences("cwriter_nested", Context.MODE_PRIVATE)
+                    .edit().remove("nested_$workId").apply()
+            }
+            return items
+        }
+        return mutableListOf()
     }
 
     private fun itemListToJson(list: List<NestedItem>): JSONArray = JSONArray().also { arr ->
@@ -291,6 +317,7 @@ class NestedListViewModel : ViewModel() {
 @Composable
 fun NestedListPanel(
     isVisible: Boolean,
+    userId: String = "",
     workId: String = "",
     onDismiss: () -> Unit,
     viewModel: NestedListViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -321,7 +348,7 @@ fun NestedListPanel(
     var detailItem         by remember { mutableStateOf<NestedItem?>(null) }
 
     LaunchedEffect(workId) {
-        viewModel.init(context, workId)
+        viewModel.init(context, userId, workId)
         viewModel.onDuplicateCallback = { msg -> duplicateMessage = msg }
     }
 

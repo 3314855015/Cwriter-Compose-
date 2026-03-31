@@ -37,6 +37,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.cwriter.data.repository.FileStorageRepository
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -108,15 +109,19 @@ class GlossaryViewModel : ViewModel() {
 
     private var glossaryData = GlossaryData()
     private var context: Context? = null
+    private var userId: String = ""
     private var workId: String = ""
+    private var repository: FileStorageRepository? = null
 
     // ── 初始化 ──────────────────────────────────────────────────────────────
 
-    fun init(context: Context, workId: String) {
+    fun init(context: Context, userId: String, workId: String) {
         this.context = context
+        this.userId = userId
         this.workId = workId
+        this.repository = FileStorageRepository(context)
         viewModelScope.launch(Dispatchers.IO) {
-            glossaryData = loadFromPrefs()
+            glossaryData = loadData()
             withContext(Dispatchers.Main) {
                 _selectedItem.value = null
                 _isEditMode.value = false
@@ -237,24 +242,42 @@ class GlossaryViewModel : ViewModel() {
     // ── 持久化 ───────────────────────────────────────────────────────────────
 
     /**
-     * 持久化到 SharedPreferences
-     * key = "glossary_<workId>"，value = JSON 字符串
-     * 对应 UniApp 的 uni.setStorageSync(`glossary_data_${workId}`, data)
+     * 持久化到文件系统
+     * 路径 = works/<workId>/glossary.json
      */
     private fun save() {
-        val ctx = context ?: return
+        val repo = repository ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val json = glossaryDataToJson(glossaryData)
-            ctx.getSharedPreferences("cwriter_glossary", Context.MODE_PRIVATE)
-                .edit().putString("glossary_$workId", json.toString()).apply()
+            repo.saveGlossary(userId, workId, json.toString())
         }
     }
 
-    private fun loadFromPrefs(): GlossaryData {
+    /**
+     * 加载数据：优先从文件系统读取；文件不存在时从 SP 迁移
+     */
+    private suspend fun loadData(): GlossaryData {
+        val repo = repository ?: return GlossaryData()
         val ctx = context ?: return GlossaryData()
-        val str = ctx.getSharedPreferences("cwriter_glossary", Context.MODE_PRIVATE)
-            .getString("glossary_$workId", null) ?: return GlossaryData()
-        return try { jsonToGlossaryData(JSONObject(str)) } catch (e: Exception) { GlossaryData() }
+        val fileContent = repo.readGlossary(userId, workId)
+        if (fileContent != null) {
+            return try { jsonToGlossaryData(JSONObject(fileContent)) }
+            catch (e: Exception) { GlossaryData() }
+        }
+        // 文件不存在 → 尝试从 SP 迁移
+        val spStr = ctx.getSharedPreferences("cwriter_glossary", Context.MODE_PRIVATE)
+            .getString("glossary_$workId", null)
+        if (spStr != null) {
+            val data = try { jsonToGlossaryData(JSONObject(spStr)) }
+            catch (e: Exception) { GlossaryData() }
+            // 迁移到文件系统
+            val json = glossaryDataToJson(data)
+            repo.saveGlossary(userId, workId, json.toString())
+            ctx.getSharedPreferences("cwriter_glossary", Context.MODE_PRIVATE)
+                .edit().remove("glossary_$workId").apply()
+            return data
+        }
+        return GlossaryData()
     }
 
     // ── JSON 序列化 ───────────────────────────────────────────────────────────
@@ -324,6 +347,7 @@ class GlossaryViewModel : ViewModel() {
 @Composable
 fun GlossaryPanel(
     isVisible: Boolean,
+    userId: String = "",
     workId: String = "",
     onDismiss: () -> Unit,
     onInsertText: (String) -> Unit = {},
@@ -362,7 +386,7 @@ fun GlossaryPanel(
 
     // 初始化（每次 workId 变化时重新加载）
     LaunchedEffect(workId) {
-        viewModel.init(context, workId)
+        viewModel.init(context, userId, workId)
         viewModel.onDuplicateCallback = { msg -> duplicateMessage = msg }
     }
 

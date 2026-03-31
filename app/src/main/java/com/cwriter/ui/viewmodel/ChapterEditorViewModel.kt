@@ -276,23 +276,39 @@ class ChapterEditorViewModel : ViewModel() {
 
     private fun loadForeshadowings() {
         val ctx = context ?: return
+        val repo = repository ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            val key = "foreshadowing_$workId"
-            val str = ctx.getSharedPreferences("cwriter_foreshadowing", Context.MODE_PRIVATE)
-                .getString(key, null)
-            val list = if (str != null) {
-                try { jsonToForeshadowings(JSONArray(str)) } catch (e: Exception) { emptyList() }
-            } else emptyList()
+            // 优先从文件系统读取
+            var list = emptyList<Foreshadowing>()
+            val fileContent = repo.readForeshadowings(userId, workId)
+            if (fileContent != null) {
+                list = try { jsonToForeshadowings(JSONArray(fileContent)) }
+                catch (e: Exception) { emptyList() }
+            } else {
+                // 文件不存在 → 尝试从 SP 迁移
+                val key = "foreshadowing_$workId"
+                val spStr = ctx.getSharedPreferences("cwriter_foreshadowing", Context.MODE_PRIVATE)
+                    .getString(key, null)
+                if (spStr != null) {
+                    list = try { jsonToForeshadowings(JSONArray(spStr)) }
+                    catch (e: Exception) { emptyList() }
+                    if (list.isNotEmpty()) {
+                        val arr = foreshadowingsToJson(list)
+                        repo.saveForeshadowings(userId, workId, arr.toString())
+                        ctx.getSharedPreferences("cwriter_foreshadowing", Context.MODE_PRIVATE)
+                            .edit().remove(key).apply()
+                    }
+                }
+            }
             withContext(Dispatchers.Main) { _foreshadowings.value = list }
         }
     }
 
     private fun saveForeshadowings() {
-        val ctx = context ?: return
+        val repo = repository ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val arr = foreshadowingsToJson(_foreshadowings.value)
-            ctx.getSharedPreferences("cwriter_foreshadowing", Context.MODE_PRIVATE)
-                .edit().putString("foreshadowing_$workId", arr.toString()).apply()
+            repo.saveForeshadowings(userId, workId, arr.toString())
         }
     }
 

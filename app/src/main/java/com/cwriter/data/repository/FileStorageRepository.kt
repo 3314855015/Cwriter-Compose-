@@ -1018,5 +1018,58 @@ class FileStorageRepository(private val context: Context) {
         )
     }
 
+    // ============ 功能E/F/G 统一文件存储 ============
+
+    /** 故事树数据文件路径 */
+    private fun getNestedListFile(userId: String, workId: String): File =
+        File(getWorkDir(userId, workId), "nested_list.json")
+
+    /** 词库数据文件路径 */
+    private fun getGlossaryFile(userId: String, workId: String): File =
+        File(getWorkDir(userId, workId), "glossary.json")
+
+    /** 伏笔数据文件路径 */
+    private fun getForeshadowingFile(userId: String, workId: String): File =
+        File(getWorkDir(userId, workId), "foreshadowings.json")
+
+    /**
+     * 读取故事树 JSON 字符串，文件不存在返回 null
+     */
+    suspend fun readNestedList(userId: String, workId: String): String? = withContext(Dispatchers.IO) {
+        val file = getNestedListFile(userId, workId)
+        if (!file.exists()) null else try { file.readText() } catch (_: Exception) { null }
+    }
+
+    /** 保存故事树 JSON 字符串 */
+    suspend fun saveNestedList(userId: String, workId: String, json: String) = withContext(Dispatchers.IO) {
+        getNestedListFile(userId, workId).writeText(json)
+    }
+
+    /**
+     * 读取词库 JSON 字符串，文件不存在返回 null
+     */
+    suspend fun readGlossary(userId: String, workId: String): String? = withContext(Dispatchers.IO) {
+        val file = getGlossaryFile(userId, workId)
+        if (!file.exists()) null else try { file.readText() } catch (_: Exception) { null }
+    }
+
+    /** 保存词库 JSON 字符串 */
+    suspend fun saveGlossary(userId: String, workId: String, json: String) = withContext(Dispatchers.IO) {
+        getGlossaryFile(userId, workId).writeText(json)
+    }
+
+    /**
+     * 读取伏笔 JSON 字符串，文件不存在返回 null
+     */
+    suspend fun readForeshadowings(userId: String, workId: String): String? = withContext(Dispatchers.IO) {
+        val file = getForeshadowingFile(userId, workId)
+        if (!file.exists()) null else try { file.readText() } catch (_: Exception) { null }
+    }
+
+    /** 保存伏笔 JSON 字符串 */
+    suspend fun saveForeshadowings(userId: String, workId: String, json: String) = withContext(Dispatchers.IO) {
+        getForeshadowingFile(userId, workId).writeText(json)
+    }
+
 }
 

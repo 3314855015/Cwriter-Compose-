@@ -301,11 +301,13 @@ fun ChapterEditorScreen(
         // ── 功能面板
         NestedListPanel(
             isVisible = showNestedListPanel,
+            userId    = userId,
             workId    = workId,
             onDismiss = { viewModel.toggleNestedListPanel() }
         )
         GlossaryPanel(
             isVisible    = showGlossaryPanel,
+            userId       = userId,
             workId       = workId,
             onDismiss    = { viewModel.toggleGlossaryPanel() },
             onInsertText = { text -> viewModel.requestInsertText(text) }
