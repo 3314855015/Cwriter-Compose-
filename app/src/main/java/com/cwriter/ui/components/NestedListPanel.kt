@@ -368,9 +368,8 @@ fun NestedListPanel(
                     isEditMode       = isEditMode,
                     onBackClick      = { if (isAtTopLevel) onDismiss() else viewModel.goBack() },
                     onAddClick       = { isAddingParent = true; duplicateMessage = null; showAddDialog = true },
-                    onItemClick      = { item -> if (!isEditMode) viewModel.selectItem(item) },
-                    onItemLongPress  = { item -> if (!isEditMode) detailItem = item
-                                                 else deleteParentTarget = item },
+                    onItemClick      = { item -> if (isEditMode) deleteParentTarget = item else viewModel.selectItem(item) },
+                    onItemLongPress  = { item -> if (!isEditMode) detailItem = item },
                     onReorder        = { from, to -> viewModel.reorderParent(from, to) }
                 )
 
