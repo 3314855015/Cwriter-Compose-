@@ -879,9 +879,12 @@ class FileStorageRepository(private val context: Context) {
         // 更新卷统计
         updateVolumeStats(userId, workId, volumeId)
 
-        // 更新作品修改时间
+        // 更新作品总字数 + 修改时间
         val work = getWork(userId, workId)
         if (work != null) {
+            val volumes = getVolumes(userId, workId)
+            work.wordCount = volumes.sumOf { it.wordCount.toLong() }.toInt()
+            work.chapterCount = volumes.sumOf { it.chapterCount }
             work.updatedAt = System.currentTimeMillis()
             updateWork(userId, work)
         }
