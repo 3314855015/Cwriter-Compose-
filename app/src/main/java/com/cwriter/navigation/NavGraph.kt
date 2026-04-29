@@ -39,7 +39,22 @@ fun CWriterNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToEditor = { wId, chapterId, volumeId ->
                     navController.navigate(Screen.ChapterEditor.createRoute(wId, chapterId, volumeId))
+                },
+                onNavigateToSync = { wId ->
+                    navController.navigate(Screen.Sync.createRoute(wId))
                 }
+            )
+        }
+
+        composable(
+            route = Screen.Sync.route,
+            arguments = listOf(navArgument("workId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val workId = backStackEntry.arguments?.getString("workId") ?: ""
+            SyncScreen(
+                userId = userId,
+                workId = workId,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

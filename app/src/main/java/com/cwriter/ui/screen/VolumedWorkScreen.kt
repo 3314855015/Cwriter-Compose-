@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ import com.cwriter.ui.components.CreateChapterDialog
 import com.cwriter.ui.components.CreateVolumeDialog
 import com.cwriter.ui.components.RenameVolumeDialog
 import com.cwriter.ui.components.VolumeActionMenu
+import com.cwriter.ui.theme.AccentBlue
 import com.cwriter.ui.theme.CWriterTheme
 import com.cwriter.ui.theme.LocalIsDark
 import com.cwriter.ui.viewmodel.VolumedWorkViewModel
@@ -71,6 +74,7 @@ fun VolumedWorkScreen(
     workId: String,
     onNavigateBack: () -> Unit,
     onNavigateToEditor: (String, String, String) -> Unit,
+    onNavigateToSync: (String) -> Unit = {},
     viewModel: VolumedWorkViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -137,6 +141,7 @@ fun VolumedWorkScreen(
                 textSub     = textSub,
                 border      = border,
                 onMenuClick = { showCatalog = true },
+                onSyncClick = { onNavigateToSync(workId) },
                 onCloseClick = onNavigateBack
             )
 
@@ -356,6 +361,7 @@ private fun VolumedTopBar(
     textSub: Color,
     border: Color,
     onMenuClick: () -> Unit,
+    onSyncClick: () -> Unit,
     onCloseClick: () -> Unit
 ) {
     Row(
@@ -387,6 +393,15 @@ private fun VolumedTopBar(
             maxLines  = 1,
             overflow  = TextOverflow.Ellipsis
         )
+        // 同步按钮（在返回按钮左边）
+        IconButton(onClick = onSyncClick) {
+            Icon(
+                imageVector = Icons.Default.Sync,
+                contentDescription = "同步到阅读",
+                tint = if (LocalIsDark.current) Orange else AccentBlue,
+                modifier = Modifier.size(22.dp)
+            )
+        }
         TextButton(onClick = onCloseClick) {
             Text("X", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = textSub)
         }

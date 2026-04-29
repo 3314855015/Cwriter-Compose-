@@ -11,6 +11,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.Date
+import java.util.UUID
 
 /**
  * 文件存储仓库 - 负责本地文件的读写操作
@@ -350,6 +351,10 @@ class FileStorageRepository(private val context: Context) {
     // ============ JSON 转换 ============
 
     private fun jsonToWork(json: JSONObject): Work {
+        // 迁移兼容：旧数据没有 sync_id 时自动生成 UUID
+        val rawSyncId = json.optString("sync_id", "")
+        val syncId = if (rawSyncId.isEmpty()) UUID.randomUUID().toString() else rawSyncId
+        
         return Work(
             id = json.optString("id"),
             title = json.optString("title"),
@@ -364,7 +369,9 @@ class FileStorageRepository(private val context: Context) {
             mapCount = json.optInt("map_count"),
             createdAt = json.optLong("created_at"),
             updatedAt = json.optLong("updated_at"),
-            isActive = json.optBoolean("is_active", true)
+            isActive = json.optBoolean("is_active", true),
+            syncId = syncId,
+            syncVersion = json.optInt("sync_version", 0)
         )
     }
 
@@ -382,10 +389,17 @@ class FileStorageRepository(private val context: Context) {
             put("created_at", work.createdAt)
             put("updated_at", work.updatedAt)
             put("is_active", work.isActive)
+            // 同步字段
+            put("sync_id", work.syncId)
+            put("sync_version", work.syncVersion)
         }
     }
 
     private fun jsonToChapter(json: JSONObject): Chapter {
+        // 迁移兼容：旧数据没有 sync_id 时自动生成 UUID
+        val rawSyncId = json.optString("sync_id", "")
+        val syncId = if (rawSyncId.isEmpty()) UUID.randomUUID().toString() else rawSyncId
+        
         return Chapter(
             id = json.optString("id"),
             title = json.optString("title"),
@@ -396,7 +410,8 @@ class FileStorageRepository(private val context: Context) {
             updatedAt = json.optLong("updated_at"),
             volumeId = json.optString("volume_id"),
             volumeOrder = json.optInt("volume_order"),
-            globalOrder = json.optInt("global_order")
+            globalOrder = json.optInt("global_order"),
+            syncId = syncId
         )
     }
 
@@ -412,6 +427,8 @@ class FileStorageRepository(private val context: Context) {
             put("volume_id", chapter.volumeId)
             put("volume_order", chapter.volumeOrder)
             put("global_order", chapter.globalOrder)
+            // 同步字段
+            put("sync_id", chapter.syncId)
         }
     }
 

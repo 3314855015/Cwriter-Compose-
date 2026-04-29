@@ -15,4 +15,8 @@ sealed class Screen(val route: String) {
         fun createRoute(workId: String, chapterId: String, volumeId: String = "") =
             "editor/$workId/$chapterId/${volumeId.ifEmpty { "_" }}"
     }
+    /** 同步到阅读APP页面 */
+    object Sync : Screen("sync/{workId}") {
+        fun createRoute(workId: String) = "sync/$workId"
+    }
 }
