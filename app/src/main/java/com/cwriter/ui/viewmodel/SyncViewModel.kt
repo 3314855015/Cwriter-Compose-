@@ -2,7 +2,6 @@ package com.cwriter.ui.screen
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cwriter.data.model.Chapter
@@ -36,7 +35,8 @@ class SyncViewModel : ViewModel() {
         val isLoading: Boolean = true,
         val work: Work = Work(),
         val totalChapters: Int = 0,
-        val isReadingInstalled: Boolean = false,
+        /** Reading APP 检测状态：detecting / ready / not_found */
+        val readingAppStatus: String = "detecting",
         val hasSyncedBefore: Boolean = false,
         val syncVersion: Int = 0,
         val lastSyncTime: String? = null,
@@ -81,38 +81,19 @@ class SyncViewModel : ViewModel() {
                 }
                 _uiState.value = _uiState.value.copy(totalChapters = totalChapters)
                 
-                // 3. 检测 Reading APP 是否已安装
-                val isInstalled = checkReadingAppInstalled(context)
-                _uiState.value = _uiState.value.copy(isReadingInstalled = isInstalled)
+                // 3. 跳过 getPackageInfo 检测（MIUI/HyperOS AppsFilter 会不可靠地拦截）
+                //    采用乐观策略：默认视为就绪，由 startActivity 来真正校验
+                _uiState.value = _uiState.value.copy(readingAppStatus = "ready")
                 
                 _uiState.value = _uiState.value.copy(isLoading = false)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    readingAppStatus = "ready", // 即使加载异常也不阻断同步按钮
                     syncMessage = "加载数据失败：${e.message}",
                     isError = true
                 )
             }
-        }
-    }
-    
-    /**
-     * 检测 Reading APP 是否已安装
-     */
-    private fun checkReadingAppInstalled(context: Context): Boolean {
-        return try {
-            context.packageManager.getPackageInfo(READING_PACKAGE, 0)
-            true
-        } catch (e: PackageManager.NameNotFoundException) {
-            android.util.Log.w("SyncViewModel", "Reading APP 未安装: $READING_PACKAGE", e)
-            false
-        } catch (e: SecurityException) {
-            // MIUI/部分 ROM 会拦截跨应用 package 查询，不能误判为"未安装"
-            android.util.Log.w("SyncViewModel", "查询 Reading APP 被 OS 拦截（可能需手动授权），默认视为已安装", e)
-            true  // 假设已安装，让后续 Intent 操作来真正检验
-        } catch (e: Exception) {
-            android.util.Log.e("SyncViewModel", "检测 Reading APP 异常", e)
-            false
         }
     }
     
@@ -184,9 +165,16 @@ class SyncViewModel : ViewModel() {
                 )
                 
             } catch (e: Exception) {
+                val errMsg = when (e) {
+                    is android.content.ActivityNotFoundException ->
+                        "阅读 APP 未安装或无法启动，请确认已安装 com.reading.my"
+                    is SecurityException ->
+                        "系统拦截了跨应用调用，请到 设置→应用管理→Cwriter→权限 中开启关联启动/跨应用权限"
+                    else -> "同步失败：${e.message}"
+                }
                 _uiState.value = _uiState.value.copy(
                     isSyncing = false,
-                    syncMessage = "同步失败：${e.message}",
+                    syncMessage = errMsg,
                     isError = true
                 )
             }

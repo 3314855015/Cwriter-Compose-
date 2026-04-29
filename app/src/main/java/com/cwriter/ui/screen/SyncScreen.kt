@@ -112,7 +112,6 @@ fun SyncScreen(
                 
                 // 同步状态卡片
                 SyncStatusCard(
-                    isReadingInstalled = uiState.isReadingInstalled,
                     hasSyncedBefore = uiState.hasSyncedBefore,
                     syncVersion = uiState.syncVersion,
                     bgCard = bgCard,
@@ -123,23 +122,20 @@ fun SyncScreen(
                 
                 Spacer(Modifier.height(12.dp))
                 
-                // Reading APP 状态
+                // Reading APP 状态（乐观策略：默认就绪）
                 ReadingAppStatusCard(
-                    isInstalled = uiState.isReadingInstalled,
+                    status = uiState.readingAppStatus,
                     bgCard = bgCard,
                     textMain = textMain,
                     textSub = textSub,
                     green = Green,
-                    orange = Orange,
-                    border = border,
-                    onOpenStore = { /* TODO: 跳转应用商店 */ }
+                    border = border
                 )
                 
                 Spacer(Modifier.height(24.dp))
                 
-                // 主按钮
+                // 主按钮（不再因"未检测到"而禁用）
                 SyncButton(
-                    isReadingInstalled = uiState.isReadingInstalled,
                     isSyncing = uiState.isSyncing,
                     orange = Orange,
                     onClick = { viewModel.syncToReadingApp(context) }
@@ -252,7 +248,6 @@ private fun InfoRow(label: String, value: String, textMain: Color, textSub: Colo
 // ─── 同步状态卡片 ─────────────────────────────────
 @Composable
 private fun SyncStatusCard(
-    isReadingInstalled: Boolean,
     hasSyncedBefore: Boolean,
     syncVersion: Int,
     bgCard: Color,
@@ -274,15 +269,9 @@ private fun SyncStatusCard(
             Spacer(Modifier.height(12.dp))
             
             when {
-                !isReadingInstalled -> {
-                    Text(
-                        "阅读APP未安装，请先安装后再进行同步",
-                        fontSize = 13.sp, color = textSub
-                    )
-                }
                 !hasSyncedBefore -> {
                     Text(
-                        "尚未同步过此作品，首次同步将导出全部 $syncVersion 个版本的内容",
+                        "尚未同步过此作品，首次同步将导出全部内容",
                         fontSize = 13.sp, color = textSub
                     )
                 }
@@ -300,14 +289,12 @@ private fun SyncStatusCard(
 // ─── Reading APP 状态 ─────────────────────────────
 @Composable
 private fun ReadingAppStatusCard(
-    isInstalled: Boolean,
+    status: String,
     bgCard: Color,
     textMain: Color,
     textSub: Color,
     green: Color,
-    orange: Color,
-    border: Color,
-    onOpenStore: () -> Unit
+    border: Color
 ) {
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -322,6 +309,7 @@ private fun ReadingAppStatusCard(
             Text("阅读 APP", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = textMain)
             Spacer(Modifier.height(12.dp))
             
+            val isReady = (status == "ready")
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -329,28 +317,24 @@ private fun ReadingAppStatusCard(
                 Box(
                     modifier = Modifier
                         .size(10.dp)
-                        .background(if (isInstalled) green else orange, CircleShape)
+                        .background(if (isReady) green else Color.Gray, CircleShape)
                 )
                 Text(
-                    if (isInstalled) "已安装" else "未安装",
+                    when (status) {
+                        "detecting" -> "检测中..."
+                        "ready" -> "就绪"
+                        else -> "未知"
+                    },
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isInstalled) green else orange
+                    color = if (isReady) green else Color.Gray
                 )
             }
             
-            if (!isInstalled) {
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = onOpenStore,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("去应用商店下载", fontSize = 13.sp, color = orange)
-                }
-            } else {
+            if (isReady) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "包名：com.reading.my",
+                    "包名：com.reading.my | 点击同步按钮即可发送数据",
                     fontSize = 12.sp, color = textSub
                 )
             }
@@ -361,14 +345,13 @@ private fun ReadingAppStatusCard(
 // ─── 主按钮 ──────────────────────────────────────
 @Composable
 private fun SyncButton(
-    isReadingInstalled: Boolean,
     isSyncing: Boolean,
     orange: Color,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
-        enabled = isReadingInstalled && !isSyncing,
+        enabled = !isSyncing,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
