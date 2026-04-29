@@ -228,6 +228,13 @@ class FileStorageRepository(private val context: Context) {
      */
     suspend fun updateChapter(userId: String, workId: String, chapter: Chapter): Boolean = withContext(Dispatchers.IO) {
         try {
+            // ★ 诊断：记录保存时的内容状态
+            android.util.Log.d("CwriterRepo",
+                "updateChapter(全量): id='${chapter.id}' title='${chapter.title}' " +
+                "savingContentLen=${chapter.content.length} wordCount=${chapter.wordCount} " +
+                "preview=${chapter.content.take(100).replace("\n","\\n")}"
+            )
+
             chapter.updatedAt = System.currentTimeMillis()
             chapter.updateWordCount()
 
@@ -396,6 +403,17 @@ class FileStorageRepository(private val context: Context) {
     }
 
     private fun jsonToChapter(json: JSONObject): Chapter {
+        // ★ 诊断：打印原始 JSON 中 content 字段的实际值
+        val rawContent = json.optString("content", "")
+        android.util.Log.d("CwriterRepo",
+            "jsonToChapter: id='${json.optString("id","?")}' " +
+            "title='${json.optString("title")}' " +
+            "contentLen=${rawContent.length} " +
+            "hasContentKey=${json.has("content")} " +
+            "keys=${json.keys().asSequence().toList()} " +
+            "contentPreview=${rawContent.take(150).replace("\n","\\n").take(120)}"
+        )
+
         // 迁移兼容：旧数据没有 sync_id 时自动生成 UUID
         val rawSyncId = json.optString("sync_id", "")
         val syncId = if (rawSyncId.isEmpty()) UUID.randomUUID().toString() else rawSyncId
@@ -856,6 +874,11 @@ class FileStorageRepository(private val context: Context) {
         val chapterFile = getVolumeChapterFile(userId, workId, volumeId, chapterId)
         val chaptersListFile = getVolumeChaptersListFile(userId, workId, volumeId)
 
+        // ★ 诊断：记录更新请求
+        android.util.Log.d("CwriterRepo",
+            "updateChapter(卷): volumeId=$volumeId, chapterId=$chapterId, updates=$updates"
+        )
+
         val chapter = if (chapterFile.exists())
             jsonToChapter(JSONObject(chapterFile.readText()))
         else
@@ -919,6 +942,54 @@ class FileStorageRepository(private val context: Context) {
         for (vol in volumes) {
             all += getChaptersByVolume(userId, workId, vol.id)
         }
+        all.sortedBy { it.globalOrder }
+    }
+
+    /**
+     * ★ 同步专用：获取所有章节的完整内容（含正文）
+     *
+     * 与 getAllChapters() 的区别：
+     * - chapters.json / 卷列表文件中 content="" 是故意省略的（节省空间/性能）
+     * - 此方法会额外从每个章节的单文件 {chapterId}.json 中补全 content
+     * - 仅在同步导出时调用，不影响日常列表加载性能
+     */
+    suspend fun getAllChaptersWithContent(userId: String, workId: String): List<Chapter> = withContext(Dispatchers.IO) {
+        val volumes = getVolumes(userId, workId)
+        val all = mutableListOf<Chapter>()
+
+        for (vol in volumes) {
+            val chaptersFile = getVolumeChaptersListFile(userId, workId, vol.id)
+            if (!chaptersFile.exists()) continue
+
+            try {
+                val jsonArray = JSONArray(chaptersFile.readText())
+                for (i in 0 until jsonArray.length()) {
+                    var ch = jsonToChapter(jsonArray.getJSONObject(i))
+
+                    // 从单章节文件补全 content
+                    if (ch.content.isEmpty() && ch.id.isNotEmpty()) {
+                        runCatching {
+                            val detailFile = getVolumeChapterFile(userId, workId, vol.id, ch.id)
+                            if (detailFile.exists()) {
+                                val detail = jsonToChapter(JSONObject(detailFile.readText()))
+                                if (detail.content.isNotEmpty()) {
+                                    ch = ch.copy(content = detail.content, wordCount = detail.wordCount)
+                                }
+                            }
+                        }
+                    }
+
+                    all.add(ch)
+                }
+            } catch (_: Exception) { /* 单卷失败不阻断整体 */ }
+        }
+
+        android.util.Log.i("CwriterRepo",
+            "getAllChaptersWithContent: 共${all.size}章, " +
+            "有内容=${all.count { it.content.isNotEmpty() }}, " +
+            "空内容=${all.count { it.content.isEmpty() }}"
+        )
+
         all.sortedBy { it.globalOrder }
     }
 

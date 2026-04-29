@@ -52,6 +52,23 @@ data class ImportResult(
  * 用于导出到 Reading APP
  */
 fun exportForSync(work: Work, chapters: List<Chapter>, volumes: Map<String, Volume>): SyncPayload {
+    // ════════════ 诊断日志：截留每个 Chapter 的完整状态 ════════════
+    android.util.Log.i("CwriterExport", "=== exportForSync 开始 === work=${work.title}, chapters=${chapters.size}, volumes=${volumes.size}")
+    android.util.Log.i("CwriterExport", "work.syncId=${work.syncId}, work.syncVersion=${work.syncVersion}")
+    chapters.forEachIndexed { idx, ch ->
+        val preview = ch.content.take(200).let {
+            if (it.length < ch.content.length) "$it...(共${ch.content.length}字符)" else it
+        }
+        val previewRepr = preview.replace("\n", "\\n").take(250)
+        android.util.Log.d("CwriterExport",
+            "  [ch$idx] id='${ch.id}' syncId='${ch.syncId}' " +
+            "title='${ch.title}' " +
+            "contentLen=${ch.content.length} wordCount=${ch.wordCount} isCompleted=${ch.isCompleted} " +
+            "volumeId='${ch.volumeId}' globalOrder=${ch.globalOrder} " +
+            "contentPreview='$previewRepr'"
+        )
+    }
+
     // 按 globalOrder 排序确保章节顺序正确
     val sortedChapters = chapters.sortedBy { it.globalOrder }
     

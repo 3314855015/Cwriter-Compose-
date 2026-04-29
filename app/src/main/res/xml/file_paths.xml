@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 同步数据缓存目录：Cwriter 写 JSON 文件，Reading 通过 FileProvider 读取 -->
+    <cache-path name="sync_cache" path="." />
+</paths>

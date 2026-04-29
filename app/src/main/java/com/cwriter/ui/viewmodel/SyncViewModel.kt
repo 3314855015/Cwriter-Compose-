@@ -2,6 +2,7 @@ package com.cwriter.ui.screen
 
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cwriter.data.model.Chapter
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 /**
  * 同步页面 ViewModel
@@ -49,7 +51,8 @@ class SyncViewModel : ViewModel() {
     companion object {
         const val READING_PACKAGE = "com.reading.my"
         const val SYNC_ACTION = "com.reading.app.IMPORT_BOOK"
-        const val EXTRA_SYNC_PAYLOAD = "SYNC_PAYLOAD"
+        const val EXTRA_SYNC_PAYLOAD = "SYNC_PAYLOAD"          // 旧：直传 JSON 字符串（保留兼容）
+        const val EXTRA_SYNC_URI = "SYNC_DATA_URI"              // 新：文件 URI（无大小限制）
         const val EXTRA_SOURCE_APP = "SOURCE_APP"
     }
     
@@ -98,26 +101,29 @@ class SyncViewModel : ViewModel() {
     }
     
     /**
-     * 执行同步：导出 → 发送 Intent 到 Reading APP
+     * 执行同步：导出 JSON → 写入文件 → 通过 FileProvider URI 发送到 Reading APP
+     *
+     * 为什么用文件而不是 Intent 直传字符串？
+     * Android Binder Transaction Buffer 限制 ~1MB，一本完整小说的 JSON 通常超过此限制。
+     * 文件方案：JSON 写入缓存 → FileProvider 生成 content:// URI → URI 仅几十字节，无大小限制。
      */
     fun syncToReadingApp(context: Context) {
         viewModelScope.launch {
             try {
                 _uiState.value = _uiState.value.copy(isSyncing = true, syncMessage = "正在准备数据...", isError = false)
-                
+
                 val work = _uiState.value.work
-                
-                // 1. 收集所有卷和章节
+
+                // 1. 收集所有卷和章节（★ 同步专用：从单文件补全完整 content）
                 val volumes = repository?.getVolumes(userId, workId) ?: emptyList()
-                val volumesMap = mutableMapOf<String, Volume>()
-                val allChapters = mutableListOf<Chapter>()
-                
-                for (volume in volumes) {
-                    volumesMap[volume.id] = volume
-                    val chapters = repository?.getChaptersByVolume(userId, workId, volume.id) ?: emptyList()
-                    allChapters.addAll(chapters)
+                val volumesMap = mutableMapOf<String, Volume>().apply {
+                    volumes.forEach { this[it.id] = it }
                 }
-                
+
+                _uiState.value = _uiState.value.copy(syncMessage = "正在读取章节内容...")
+                // ★ 使用同步专用方法：自动从 {chapterId}.json 补全 content
+                val allChapters = repository?.getAllChaptersWithContent(userId, workId) ?: emptyList()
+
                 if (allChapters.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         isSyncing = false,
@@ -126,44 +132,56 @@ class SyncViewModel : ViewModel() {
                     )
                     return@launch
                 }
-                
+
                 // 2. 导出为 SyncPayload JSON
                 _uiState.value = _uiState.value.copy(syncMessage = "正在生成同步数据...")
                 val payload = exportForSync(work, allChapters, volumesMap)
                 val jsonStr = payloadToJson(payload)
-                
-                // 3. 检查大小（超过 1MB 需要其他方案）
-                val jsonSize = jsonStr.toByteArray().size
-                if (jsonSize > 1024 * 1024) {
-                    _uiState.value = _uiState.value.copy(
-                        isSyncing = false,
-                        syncMessage = "数据过大 (${jsonSize / 1024}KB)，暂不支持",
-                        isError = true
-                    )
-                    return@launch
+
+                // ★ 内容完整性预检（Cwriter 端也做一遍）
+                val totalContentLen = payload.chapters.sumOf { it.content.length }
+                val emptyChapterCount = payload.chapters.count { it.content.length <= 1 }
+                android.util.Log.w("CwriterSync", "📊 内容检查: 总内容=${totalContentLen}字符, 空章=$emptyChapterCount/${payload.chapters.size}, JSON=${jsonStr.length}字符")
+
+                if (totalContentLen < allChapters.size * 2) {
+                    android.util.Log.e("CwriterSync", "⚠️ 警告: 几乎所有章节内容为空! 请确认章节正文已保存")
+                    // 不阻断导入，但记录警告（可能是用户只写了标题还没写正文）
                 }
-                
+
+                // 3. 将 JSON 写入缓存目录的临时文件
+                _uiState.value = _uiState.value.copy(syncMessage = "正在写入数据文件...")
+                val syncDir = File(context.cacheDir, "sync_data").apply { mkdirs() }
+                val syncFile = File(syncDir, "sync_${work.syncId}_${work.syncVersion}_${System.currentTimeMillis()}.json")
+                syncFile.writeText(jsonStr, Charsets.UTF_8)
+
+                val fileSizeKB = syncFile.length() / 1024
+                android.util.Log.i("CwriterSync", "📁 同步文件已写入: ${syncFile.name}, 大小=$fileSizeKB KB")
+
                 // 4. 更新 syncVersion（每次同步 +1）
                 work.syncVersion++
                 repository?.updateWork(userId, work)
                 _uiState.value = _uiState.value.copy(syncVersion = work.syncVersion)
-                
-                // 5. 通过 Intent 发送到 Reading
+
+                // 5. 通过 FileProvider 生成 content:// URI 并发送到 Reading
                 _uiState.value = _uiState.value.copy(syncMessage = "正在发送到阅读APP...")
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", syncFile)
+
                 val intent = Intent(SYNC_ACTION).apply {
-                    putExtra(EXTRA_SYNC_PAYLOAD, jsonStr)
+                    putExtra(EXTRA_SYNC_URI, uri)           // ★ 新方式：传文件 URI
+                    putExtra(EXTRA_SYNC_PAYLOAD, jsonStr)  // ★ 兼容旧版/URI 失败时的 fallback
                     putExtra(EXTRA_SOURCE_APP, "cwriter")
                     `package` = READING_PACKAGE
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) // 授予 Reading 读权限
                 }
-                
+
                 context.startActivity(intent)
-                
+
                 _uiState.value = _uiState.value.copy(
                     isSyncing = false,
-                    syncMessage = "已发送！共 ${payload.chapters.size} 章，请切换到阅读APP查看导入进度"
+                    syncMessage = "已发送！共 ${payload.chapters.size} 章 (${fileSizeKB}KB)，请切换到阅读APP查看"
                 )
-                
+
             } catch (e: Exception) {
                 val errMsg = when (e) {
                     is android.content.ActivityNotFoundException ->
