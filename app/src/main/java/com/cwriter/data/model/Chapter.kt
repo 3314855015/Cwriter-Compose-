@@ -16,7 +16,9 @@ data class Chapter(
     var updatedAt: Long = System.currentTimeMillis(),
     var volumeId: String = "",
     var volumeOrder: Int = 0,   // 卷内序号
-    var globalOrder: Int = 0    // 全局序号（跨卷连续编号）
+    var globalOrder: Int = 0,   // 全局序号（跨卷连续编号）
+    // ====== 同步相关字段（APP间同步协议 v1.0）======
+    var syncId: String = ""      // UUID，首次创建时生成，永不改变。作为 Reading 端的 chapterId
 ) {
     fun getFormattedTime(): String {
         val date = java.util.Date(updatedAt)

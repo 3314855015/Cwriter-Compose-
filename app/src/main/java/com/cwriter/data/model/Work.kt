@@ -17,7 +17,10 @@ data class Work(
     var mapCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
     var updatedAt: Long = System.currentTimeMillis(),
-    var isActive: Boolean = true
+    var isActive: Boolean = true,
+    // ====== 同步相关字段（APP间同步协议 v1.0）======
+    var syncId: String = "",          // UUID，首次导出时生成，永不改变。作为 Reading 端的 bookId
+    var syncVersion: Int = 0          // 每次有任何改动时自增，用于增量同步版本控制
 ) {
     enum class StructureType {
         SINGLE,      // 整体作品
