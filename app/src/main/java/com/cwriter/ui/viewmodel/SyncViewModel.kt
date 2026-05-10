@@ -151,6 +151,10 @@ class SyncViewModel : ViewModel() {
                 // 3. 将 JSON 写入缓存目录的临时文件
                 _uiState.value = _uiState.value.copy(syncMessage = "正在写入数据文件...")
                 val syncDir = File(context.cacheDir, "sync_data").apply { mkdirs() }
+
+                // ★ 清理旧的同步文件（只保留最新一个，避免缓存堆积）
+                syncDir.listFiles()?.forEach { it.delete() }
+
                 val syncFile = File(syncDir, "sync_${work.syncId}_${work.syncVersion}_${System.currentTimeMillis()}.json")
                 syncFile.writeText(jsonStr, Charsets.UTF_8)
 
@@ -166,13 +170,17 @@ class SyncViewModel : ViewModel() {
                 _uiState.value = _uiState.value.copy(syncMessage = "正在发送到阅读APP...")
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", syncFile)
 
+                // ★ 显式授予 Reading APP 读取权限（FLAG_GRANT_READ_URI_PERMISSION 在
+                //   FLAG_ACTIVITY_NEW_TASK 场景下不可靠，需要额外调用 grantUriPermission）
+                context.grantUriPermission(READING_PACKAGE, uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
                 val intent = Intent(SYNC_ACTION).apply {
                     putExtra(EXTRA_SYNC_URI, uri)           // ★ 新方式：传文件 URI
                     putExtra(EXTRA_SYNC_PAYLOAD, jsonStr)  // ★ 兼容旧版/URI 失败时的 fallback
                     putExtra(EXTRA_SOURCE_APP, "cwriter")
                     `package` = READING_PACKAGE
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) // 授予 Reading 读权限
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) // 双保险
                 }
 
                 context.startActivity(intent)
